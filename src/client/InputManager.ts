@@ -39,7 +39,7 @@ export class InputManager {
   }
 
   public getInput(playerIndex: number): Input {
-    const input: Input = { accel: 0, steer: 0 };
+    const input: Input = { accel: 0, steer: 0, handbrake: false };
     const config = this.playerConfigs.find((c) => c.playerId === playerIndex);
 
     if (!config) return input; // No config for this player slot
@@ -50,18 +50,21 @@ export class InputManager {
         if (this.keysPressed.has('KeyS')) input.accel -= 1;
         if (this.keysPressed.has('KeyA')) input.steer -= 1;
         if (this.keysPressed.has('KeyD')) input.steer += 1;
+        if (this.keysPressed.has('KeyX')) input.handbrake = true;
         break;
       case ControlType.ARROWS:
         if (this.keysPressed.has('ArrowUp')) input.accel += 1;
         if (this.keysPressed.has('ArrowDown')) input.accel -= 1;
         if (this.keysPressed.has('ArrowLeft')) input.steer -= 1;
         if (this.keysPressed.has('ArrowRight')) input.steer += 1;
+        if (this.keysPressed.has('Space')) input.handbrake = true;
         break;
       case ControlType.IJKL:
         if (this.keysPressed.has('KeyI')) input.accel += 1;
         if (this.keysPressed.has('KeyK')) input.accel -= 1;
         if (this.keysPressed.has('KeyJ')) input.steer -= 1;
         if (this.keysPressed.has('KeyL')) input.steer += 1;
+        if (this.keysPressed.has('Comma')) input.handbrake = true;
         break;
       case ControlType.GAMEPAD: {
         const idx = config.gamepadIndex ?? 0;
@@ -76,6 +79,9 @@ export class InputManager {
           // Triggers
           if (pad.buttons[7] && pad.buttons[7].value > 0) input.accel += pad.buttons[7].value; // R2
           if (pad.buttons[6] && pad.buttons[6].value > 0) input.accel -= pad.buttons[6].value; // L2
+
+          // Handbrake (Button 0 / A / Cross)
+          if (pad.buttons[0] && pad.buttons[0].pressed) input.handbrake = true;
         }
         break;
       }

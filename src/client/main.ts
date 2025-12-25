@@ -37,7 +37,7 @@ const clients: LocalChannel[] = []; // Operations for each local player
 
 // Game Simulation State (Client View)
 let simState: SimState | null = null;
-const serverUpdates: Array<{ tick: number, time: number, state: SimState }> = [];
+const serverUpdates: Array<{ tick: number; time: number; state: SimState }> = [];
 
 // UI Manager
 const ui = new UIManager(
@@ -70,11 +70,11 @@ void (async () => {
     startGame(settingsManager.getSettings(), tickRate);
   } else {
     // For normal startup, we might want to pass this through UI or just default?
-    // For this demo, let's just hack it into the start call if we could, 
+    // For this demo, let's just hack it into the start call if we could,
     // but UI calls startGame. Let's just override it for now if param exists.
     if (tickRateParam) {
-      console.log("Overriding tick rate to", tickRate);
-      // We need to wait for UI to call start, but we can't easily inject the param 
+      console.log('Overriding tick rate to', tickRate);
+      // We need to wait for UI to call start, but we can't easily inject the param
       // without modifying UI or Settings.
       // Quick hack: modify the callback UI uses.
       // Actually simpler: Just store it globally or pass it.
@@ -114,7 +114,7 @@ function startGame(settings: GameSettings, overrideTickRate: number = 60) {
     // Listen for updates
     client.onReceive((msg) => {
       if (msg.type === ServerMessageType.WELCOME) {
-        const payload = msg.payload as any; // Type assertion needed until Protocol is stricter
+        const payload = msg.payload; // Type assertion needed until Protocol is stricter
         console.log(`Player ${i} Joined. ID: ${payload.id}`);
         // If we are player 1 (index 0), we might want to capture initial state
         if (i === 0 && payload.initialState) {
@@ -127,7 +127,8 @@ function startGame(settings: GameSettings, overrideTickRate: number = 60) {
         const serverState = msg.payload as SimState;
 
         // 1. Update Prediction (Snap)
-        if (i === 0) { // Only do this once, not per client
+        if (i === 0) {
+          // Only do this once, not per client
           // In a perfect prediction, serverState should match simState very closely.
           // We just snap for now.
           simState = serverState;
@@ -136,7 +137,7 @@ function startGame(settings: GameSettings, overrideTickRate: number = 60) {
           serverUpdates.push({
             tick: 0, // Unknown tick for now
             time: performance.now(),
-            state: serverState
+            state: serverState,
           });
           // Keep buffer small
           if (serverUpdates.length > 20) serverUpdates.shift();
@@ -209,7 +210,7 @@ const loop = new GameLoop(
         const input = inputManager.getInput(i);
         client.send({
           type: ClientMessageType.INPUT,
-          payload: input
+          payload: input,
         });
       });
 
@@ -217,18 +218,18 @@ const loop = new GameLoop(
       // We run the SAME physics engine locally on our current state
       // This makes the game feel responsive (60fps) even if server is 10hz
       // In a full implementation, we would re-simulate from the last confirmed server state
-      // if we drifted (Server Reconciliation). 
-      // For this step, we just run forward. 
+      // if we drifted (Server Reconciliation).
+      // For this step, we just run forward.
       // When Server 'STATE' arrives (in listeners above), it overwrites simState (Naive Reconciliation).
 
       const inputs = simState.players.map((_, i) => inputManager.getInput(i));
-      // We need a local physics engine instance if we want to separate it from "server" logic 
+      // We need a local physics engine instance if we want to separate it from "server" logic
       // but here we just import the class. Ideally we instantiated one.
       // We cannot use the 'physics' var if we commented it out?
       // Let's re-instantiate it or uncomment it.
       // Since we commented it out globally, let's just make a local one or use a singleton?
       // Better to have one at top level.
-      simState = physics.step(simState, inputs, dt);
+      simState = physics.step(simState, inputs, dt, track);
     }
   },
   (alpha) => {
@@ -289,7 +290,7 @@ const loop = new GameLoop(
               }
               // Otherwise use INTERPOLATED state
               return p;
-            })
+            }),
           };
         }
       }

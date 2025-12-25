@@ -8,6 +8,7 @@ export class GameRenderer {
   private renderer: THREE.WebGLRenderer;
 
   private trackGroup: THREE.Group;
+  private skidGroup: THREE.Group;
 
   private carMeshes: THREE.Group[] = [];
 
@@ -53,6 +54,9 @@ export class GameRenderer {
     this.trackGroup = new THREE.Group();
     this.scene.add(this.trackGroup);
 
+    this.skidGroup = new THREE.Group();
+    this.scene.add(this.skidGroup);
+
     // Axes Helper
     const axesHelper = new THREE.AxesHelper(5);
     this.scene.add(axesHelper);
@@ -88,6 +92,10 @@ export class GameRenderer {
     // Clear existing
     while (this.trackGroup.children.length > 0) {
       this.trackGroup.remove(this.trackGroup.children[0]);
+    }
+    // Clear Skids on track update
+    while (this.skidGroup.children.length > 0) {
+      this.skidGroup.remove(this.skidGroup.children[0]);
     }
 
     // Geometry cache
@@ -211,8 +219,8 @@ export class GameRenderer {
     state.players.forEach((player, i) => {
       const group = this.carMeshes[i];
       group.position.set(player.x, 0, player.y); // y=0 because parts are offset internally
-      // Physics angle is CCW from +X. 
-      // ThreeJS object space: Car points along -Z? or +Z? 
+      // Physics angle is CCW from +X.
+      // ThreeJS object space: Car points along -Z? or +Z?
       // Box(1, 0.6, 4.2). Long axis is Z.
       // We need to rotate it so its forward aligns with velocity.
       // Need to negate physics angle because Physics(+Angle) -> +Z, while Three(+Rotation) -> -Z.
@@ -240,6 +248,63 @@ export class GameRenderer {
       });
 
       group.visible = true;
+
+      // Skid Marks
+      if (player.skidding) {
+        // Add marks at Rear Wheel Positions
+        // For RWD/Drift, usually rear tires spin.
+        // Wheel positions relative to car:
+        // X: +/- 0.9, Z: -1.4 (Rear)
+        // Transform to World
+        const angle = player.angle; // Physics angle (+X CCW)
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+
+        // Wait, Three Group is rotated by (-angle + PI/2).
+        // Local offset (0.9, -1.4) in Three space.
+        // Let's just use the Group's transformation matrix?
+        // But skids need to be left behind in World Space.
+        // So calculate World Pos of rear tires.
+
+        // Physics:
+        // Body Pos (x, y)
+        // Angle (theta)
+        // Rear Left: x = -1.25 (Back), y = -0.8 (Left/Right?) Physics width=1.6 -> +/- 0.8
+        // Let's use Physics Offsets from Physics.ts: {-halfL, +/- halfW}
+        // Physics: x is Forward. y is Left.
+        // Rear Left: x = -1.25, y = -0.8
+        // Rear Right: x = -1.25, y = 0.8
+
+        // World Pos:
+        // wx = px + (cos * ox - sin * oy)
+        // wy = py + (sin * ox + cos * oy)
+
+        const offsets = [
+          { x: -1.25, y: -0.8 },
+          { x: -1.25, y: 0.8 },
+        ];
+
+        const mat = new THREE.MeshBasicMaterial({ color: 0x111111, side: THREE.DoubleSide });
+        const geo = new THREE.PlaneGeometry(0.5, 0.5);
+        geo.rotateX(-Math.PI / 2); // Flat on ground
+
+        offsets.forEach((off) => {
+          const wx = player.x + (cos * off.x - sin * off.y);
+          const wy = player.y + (sin * off.x + cos * off.y);
+
+          const mark = new THREE.Mesh(geo, mat);
+          mark.position.set(wx, 0.06, wy); // Slightly above ground to avoid z-fighting with track (y=0.05)
+          // Random rotate for noise? or align with skid?
+          mark.rotation.y = Math.random() * Math.PI;
+          this.skidGroup.add(mark);
+        });
+
+        // Limit total skids to prevent crash
+        if (this.skidGroup.children.length > 1000) {
+          this.skidGroup.remove(this.skidGroup.children[0]);
+          this.skidGroup.remove(this.skidGroup.children[0]);
+        }
+      }
     });
 
     // Hide unused cars
@@ -305,29 +370,23 @@ export class GameRenderer {
         this.perspectiveCamera.position.set(
           player.x - fwdX * 0.2,
           1.1, // Eye height
-          player.y - fwdZ * 0.2
+          player.y - fwdZ * 0.2,
         );
         this.perspectiveCamera.lookAt(
           player.x + fwdX * 20,
           0.5, // Look slightly down
-          player.y + fwdZ * 20
+          player.y + fwdZ * 20,
         );
         activeCamera = this.perspectiveCamera;
-
       } else if (mode === 1) {
         // Mode 1: Third Person (Perspective)
         // Pos: Car - Fwd*8 + Up*4
         this.perspectiveCamera.aspect = vpAspect;
         this.perspectiveCamera.updateProjectionMatrix();
 
-        this.perspectiveCamera.position.set(
-          player.x - fwdX * 8,
-          4,
-          player.y - fwdZ * 8
-        );
+        this.perspectiveCamera.position.set(player.x - fwdX * 8, 4, player.y - fwdZ * 8);
         this.perspectiveCamera.lookAt(player.x, 1, player.y);
         activeCamera = this.perspectiveCamera;
-
       } else if (mode === 3) {
         // Mode 3: Iso Relative (Car Faces Up) (Orthographic)
         // Basically a Chase Cam but with Ortho
@@ -343,14 +402,9 @@ export class GameRenderer {
         // And since it is Iso, we want a diagonal down look.
         // Let's try placing camera -20 units behind car vector, and +20 up.
 
-        this.camera.position.set(
-          player.x - fwdX * 20,
-          20,
-          player.y - fwdZ * 20
-        );
+        this.camera.position.set(player.x - fwdX * 20, 20, player.y - fwdZ * 20);
         this.camera.lookAt(player.x, 0, player.y);
         activeCamera = this.camera;
-
       } else {
         // Mode 2 (Default): Iso Fixed (Orthographic)
         const frustumSize = 40;

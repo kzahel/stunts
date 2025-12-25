@@ -1,4 +1,3 @@
-
 export class GameLoop {
   private lastTime: number = 0;
   private accumulator: number = 0;

@@ -1,30 +1,29 @@
-
 import { Room } from './Room';
 import { LocalChannel } from '../shared/network/LocalTransport';
 
 export class GameServer {
-    private rooms: Room[] = [];
+  private rooms: Room[] = [];
 
-    constructor(roomTickRate: number = 60) {
-        // Create default room
-        const room = new Room(roomTickRate);
-        room.start();
-        this.rooms.push(room);
-    }
+  constructor(roomTickRate: number = 60) {
+    // Create default room
+    const room = new Room(roomTickRate);
+    room.start();
+    this.rooms.push(room);
+  }
 
-    public connectLocal(): LocalChannel {
-        const clientSide = new LocalChannel();
-        const serverSide = new LocalChannel();
+  public connectLocal(): LocalChannel {
+    const clientSide = new LocalChannel();
+    const serverSide = new LocalChannel();
 
-        clientSide.connectTo(serverSide);
+    clientSide.connectTo(serverSide);
 
-        // Add serverSide to room
-        this.rooms[0].addClient(serverSide);
+    // Add serverSide to room
+    this.rooms[0].addClient(serverSide);
 
-        return clientSide;
-    }
+    return clientSide;
+  }
 
-    public stop() {
-        this.rooms.forEach(r => r.stop());
-    }
+  public stop() {
+    this.rooms.forEach((r) => r.stop());
+  }
 }

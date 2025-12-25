@@ -1,6 +1,7 @@
 export interface Input {
   accel: number; // -1 (brake/reverse) to 1 (gas)
   steer: number; // -1 (left) to 1 (right)
+  handbrake: boolean;
 }
 
 export interface Vector2 {
@@ -16,6 +17,7 @@ export interface PhysicalBody {
   angle: number; // radians
   angularVelocity: number; // Added angularVelocity
   steer: number; // Added for visual wheel rotation
+  skidding: boolean; // Visual skid flag
 }
 
 export interface WorldState {
@@ -34,10 +36,11 @@ export function lerpBody(a: PhysicalBody, b: PhysicalBody, t: number): PhysicalB
     angle: lerp(a.angle, b.angle, t), // Note: For full correctness, need shortest path angle interpolation
     velocity: {
       x: lerp(a.velocity.x, b.velocity.x, t),
-      y: lerp(a.velocity.y, b.velocity.y, t)
+      y: lerp(a.velocity.y, b.velocity.y, t),
     },
     angularVelocity: lerp(a.angularVelocity, b.angularVelocity, t),
-    steer: lerp(a.steer, b.steer, t)
+    steer: lerp(a.steer, b.steer, t),
+    skidding: b.skidding, // Boolean, easier to snap than lerp? Or use t > 0.5
   };
 }
 
@@ -48,7 +51,7 @@ export function interpolateState(a: WorldState, b: WorldState, t: number): World
       const pB = b.players[i];
       if (!pB) return pA;
       return lerpBody(pA, pB, t);
-    })
+    }),
   };
 }
 
@@ -60,5 +63,6 @@ export const createInitialState = (playerCount: number = 1): WorldState => ({
     angle: 0,
     angularVelocity: 0, // Added angularVelocity
     steer: 0,
+    skidding: false,
   })),
 });
