@@ -180,6 +180,113 @@ export class Track {
     }
   }
 
+  public isRoad(x: number, y: number): boolean {
+    const tile = this.getTile(x, y);
+    if (!tile) return false;
+    return (
+      tile.type === TileType.Road ||
+      tile.type === TileType.RoadTurn ||
+      tile.type === TileType.RoadIntersection ||
+      tile.type === TileType.Start ||
+      tile.type === TileType.Finish
+    );
+  }
+
+  public placeRoad(x: number, y: number) {
+    if (x < 0 || x >= TRACK_SIZE || y < 0 || y >= TRACK_SIZE) return;
+
+    // Force current to be a road if it's grass
+    const current = this.getTile(x, y);
+    if (current && current.type === TileType.Grass) {
+      this.setTile(x, y, TileType.Road, current.height, 0);
+    }
+
+    // Update current and neighbors
+    this.autoTile(x, y);
+    this.autoTile(x - 1, y);
+    this.autoTile(x + 1, y);
+    this.autoTile(x, y - 1);
+    this.autoTile(x, y + 1);
+  }
+
+  private autoTile(x: number, y: number) {
+    if (!this.isRoad(x, y)) return;
+
+    const n = this.isRoad(x, y - 1);
+    const s = this.isRoad(x, y + 1);
+    const e = this.isRoad(x + 1, y);
+    const w = this.isRoad(x - 1, y);
+
+    let type: TileType = TileType.Road; // Default
+    let orientation = 0;
+
+    // Bitmask: N=1, E=2, S=4, W=8
+    let mask = 0;
+    if (n) mask |= 1;
+    if (e) mask |= 2;
+    if (s) mask |= 4;
+    if (w) mask |= 8;
+
+    // Logic Map
+    switch (mask) {
+      case 0: // Isolated
+      case 1: // N
+      case 4: // S
+      case 5: // N+S
+        type = TileType.Road;
+        orientation = 1; // Vertical
+        break;
+      case 2: // E
+      case 8: // W
+      case 10: // E+W
+        type = TileType.Road;
+        orientation = 0; // Horizontal
+        break;
+
+      // Turns
+      case 3: // N+E => NE Corner (Turn that connects N and E).
+        // In our system: Orient 0=NW?, 1=NE?, 2=SE?, 3=SW?
+        // Need to verify standard orientation for turns.
+        // Usually:
+        // 0: NW (Connects N and W)
+        // 1: NE (Connects N and E)
+        // 2: SE (Connects S and E)
+        // 3: SW (Connects S and W)
+        type = TileType.RoadTurn;
+        orientation = 1;
+        break;
+      case 6: // E+S => SE
+        type = TileType.RoadTurn;
+        orientation = 2;
+        break;
+      case 12: // S+W => SW
+        type = TileType.RoadTurn;
+        orientation = 3;
+        break;
+      case 9: // N+W => NW
+        type = TileType.RoadTurn;
+        orientation = 0;
+        break;
+
+      // Intersections (3-way or 4-way)
+      // For now, map all >2 connections to Intersection
+      case 7: // N+E+S (No W)
+      case 11: // N+E+W (No S)
+      case 13: // N+S+W (No E)
+      case 14: // E+S+W (No N)
+      case 15: // All
+        type = TileType.RoadIntersection;
+        orientation = 0;
+        break;
+    }
+
+    const tile = this.getTile(x, y);
+    if (tile) {
+      tile.type = type;
+      tile.orientation = orientation;
+    }
+  }
+
   public serialize(): SerializedTrack {
     return {
       tiles: this.tiles,

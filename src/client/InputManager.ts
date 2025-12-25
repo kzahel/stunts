@@ -33,9 +33,31 @@ export class InputManager {
     this.playerConfigs = configs;
   }
 
+  private prevButtonStates: boolean[][] = [];
+
   public update() {
-    // Poll gamepads
+    // 1. Snapshot current buttons to prev (before getting new ones)
+    for (let i = 0; i < this.gamepads.length; i++) {
+      const pad = this.gamepads[i];
+      if (pad) {
+        this.prevButtonStates[i] = pad.buttons.map((b) => b.pressed);
+      } else {
+        this.prevButtonStates[i] = [];
+      }
+    }
+
+    // 2. Poll new state
     this.gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+  }
+
+  public isButtonJustPressed(playerIdx: number, buttonIdx: number): boolean {
+    const pad = this.gamepads[playerIdx];
+    if (!pad || !pad.buttons[buttonIdx]) return false;
+
+    const currentlyPressed = pad.buttons[buttonIdx].pressed;
+    const previouslyPressed = this.prevButtonStates[playerIdx]?.[buttonIdx] || false;
+
+    return currentlyPressed && !previouslyPressed;
   }
 
   public getInput(playerIndex: number): Input {

@@ -8,6 +8,7 @@ export const EditorTool = {
   Raise: 1,
   Lower: 2,
   Flatten: 3,
+  Road: 4,
 } as const;
 
 export type EditorTool = (typeof EditorTool)[keyof typeof EditorTool];
@@ -26,6 +27,10 @@ export class Editor {
   private mouseY: number = 0;
   private raycaster = new THREE.Raycaster();
   private plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); // Ground plane
+
+  // Cursor State
+  private currentTx: number = 0;
+  private currentTy: number = 0;
 
   // Visuals
   private highlightMesh: THREE.Mesh;
@@ -107,6 +112,9 @@ export class Editor {
       case EditorTool.Flatten:
         name = '➖ FLATTEN (3)';
         break;
+      case EditorTool.Road:
+        name = 'ROAD (4)';
+        break;
     }
     this.ui.updateEditorStatus(this.active, name);
   }
@@ -145,18 +153,29 @@ export class Editor {
       // Snap to Tile Center
       const tx = Math.floor(target.x / TILE_SIZE);
       const ty = Math.floor(target.z / TILE_SIZE);
-
-      // Snap Highlight
-      const centerX = tx * TILE_SIZE + TILE_SIZE / 2;
-      const centerZ = ty * TILE_SIZE + TILE_SIZE / 2;
-
-      // Get roughly current height for cursor
-      const baseH = this.track.getVertexHeight(tx, ty);
-
-      this.highlightMesh.position.set(centerX, baseH + 0.5, centerZ);
-
-      // Logic is now in onMouseDown for discrete clicks
+      this.updateHighlight(tx, ty);
     }
+  }
+
+  public setCursorFromWorld(x: number, z: number) {
+    if (!this.active) return;
+    const tx = Math.floor(x / TILE_SIZE);
+    const ty = Math.floor(z / TILE_SIZE);
+    this.updateHighlight(tx, ty);
+  }
+
+  private updateHighlight(tx: number, ty: number) {
+    this.currentTx = tx;
+    this.currentTy = ty;
+
+    // Snap Highlight
+    const centerX = tx * TILE_SIZE + TILE_SIZE / 2;
+    const centerZ = ty * TILE_SIZE + TILE_SIZE / 2;
+
+    // Get roughly current height for cursor
+    const baseH = this.track.getVertexHeight(tx, ty);
+
+    this.highlightMesh.position.set(centerX, baseH + 0.5, centerZ);
   }
 
   private applyRaise(cx: number, cy: number) {
@@ -229,12 +248,22 @@ export class Editor {
   public onMouseDown() {
     if (!this.active) return;
 
+    // Use current cursor position (which was updated by mouse or gamepad)
+    // But wait, if we click mouse, we want to ensure we target where the MOUSE is,
+    // which might differ from where gamepad put it if we mix inputs.
+    // However, usually update() runs before mousedown?
+    // Actually mousedown event might happen between updates.
+    // Ideally we re-raycast.
+
     // Discrete Action
     const mouseVec = new THREE.Vector2(this.mouseX, this.mouseY);
     this.raycaster.setFromCamera(mouseVec, this.renderer.getActiveCamera());
 
     const target = new THREE.Vector3();
     let hit = false;
+
+    // ... Raycast logic duplicated or we trust the last update?
+    // Let's re-run raycast logic to be safe for mouse clicks.
 
     // 1. Try Terrain Mesh
     const intersects = this.raycaster.intersectObjects(
@@ -251,20 +280,33 @@ export class Editor {
     if (hit) {
       const tx = Math.floor(target.x / TILE_SIZE);
       const ty = Math.floor(target.z / TILE_SIZE);
+      this.executeTool(tx, ty, this.currentTool);
+    }
+  }
 
-      switch (this.currentTool) {
-        case EditorTool.Raise:
-          this.applyRaise(tx, ty);
-          break;
-        case EditorTool.Lower:
-          this.applyLower(tx, ty);
-          break;
-        case EditorTool.Flatten:
-          this.track.flattenRegion(tx, ty, 1, 0);
-          this.renderer.initTrackOrUpdate(this.track);
-          this.notifyChange();
-          break;
-      }
+  public applyToolAtCursor(tool?: EditorTool) {
+    if (!this.active) return;
+    this.executeTool(this.currentTx, this.currentTy, tool ?? this.currentTool);
+  }
+
+  public executeTool(tx: number, ty: number, tool: EditorTool) {
+    switch (tool) {
+      case EditorTool.Raise:
+        this.applyRaise(tx, ty);
+        break;
+      case EditorTool.Lower:
+        this.applyLower(tx, ty);
+        break;
+      case EditorTool.Flatten:
+        this.track.flattenRegion(tx, ty, 1, 0);
+        this.renderer.initTrackOrUpdate(this.track);
+        this.notifyChange();
+        break;
+      case EditorTool.Road:
+        this.track.placeRoad(tx, ty);
+        this.renderer.initTrackOrUpdate(this.track);
+        this.notifyChange();
+        break;
     }
   }
 }

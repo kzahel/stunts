@@ -296,11 +296,30 @@ window.addEventListener('mousedown', (_e) => {
 const loop = new GameLoop(
   (dt) => {
     if (appState === AppState.PLAYING) {
+      inputManager.update();
+
+      // Toggle Editor with Select Button (Button 8 on standard gamepads)
+      if (inputManager.isButtonJustPressed(0, 8)) {
+        editor.setActive(!editor.isActive());
+      }
+
       if (editor.isActive()) {
         // Editor Logic
+        // If we have player state, snap cursor to player
+        if (simState && simState.players[0]) {
+          const p = simState.players[0];
+          editor.setCursorFromWorld(p.x, p.y);
+        }
+
+        // Editor Tool Shortcuts (Gamepad)
+        if (inputManager.isButtonJustPressed(0, 0)) editor.applyToolAtCursor(EditorTool.Raise); // A / Cross
+        if (inputManager.isButtonJustPressed(0, 1)) editor.applyToolAtCursor(EditorTool.Lower); // B / Circle
+        if (inputManager.isButtonJustPressed(0, 2)) editor.applyToolAtCursor(EditorTool.Flatten); // X / Square
+        if (inputManager.isButtonJustPressed(0, 3)) editor.applyToolAtCursor(EditorTool.Road); // Y / Triangle
+
         editor.update(dt);
       } else if (simState) {
-        inputManager.update();
+        // removed inputManager.update() from here since it moved up
 
         // Collect inputs for each local player
         // For now, simpler case: assuming 1 local player for prediction or just predicting all
