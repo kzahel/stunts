@@ -11,12 +11,12 @@ describe('PhysicsEngine', () => {
 
         let state1 = createInitialState();
         for (let i = 0; i < 100; i++) {
-            state1 = physics.step(state1, input, dt);
+            state1 = physics.step(state1, [input], dt);
         }
 
         let state2 = createInitialState();
         for (let i = 0; i < 100; i++) {
-            state2 = physics.step(state2, input, dt);
+            state2 = physics.step(state2, [input], dt);
         }
 
         expect(state1).toEqual(state2);
@@ -28,9 +28,9 @@ describe('PhysicsEngine', () => {
         const dt = 1.0;
 
         let state = createInitialState();
-        state = physics.step(state, input, dt);
+        state = physics.step(state, [input], dt);
 
-        expect(state.player.velocity.x).toBeGreaterThan(0);
-        expect(state.player.position.x).toBeGreaterThan(0);
+        expect(state.players[0].velocity.x).toBeGreaterThan(0);
+        expect(state.players[0].position.x).toBeGreaterThan(0);
     });
 });

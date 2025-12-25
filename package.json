@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "devDependencies": {
+    "@types/jsdom": "^27.0.0",
     "@types/node": "^25.0.3",
     "@types/three": "^0.182.0",
     "jsdom": "^27.3.0",

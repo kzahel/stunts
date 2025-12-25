@@ -1,21 +1,17 @@
-import { expect, test, describe, beforeAll, afterAll } from 'vitest';
+import { expect, test, describe } from 'vitest';
 import { InputManager } from './Input';
 import { PhysicsEngine } from './Physics';
 import { createInitialState } from './Schema';
-import { JSDOM } from 'jsdom';
 
-// Setup basic browser env for InputManager
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');
-global.window = dom.window as any;
-global.document = dom.window.document;
-global.navigator = dom.window.navigator;
+// Note: jsdom environment is configured in vite.config.ts, so window/document are available globally.
+
 
 describe('Multiplayer Input & Physics', () => {
     test('InputManager separates P1 (Arrows) and P2 (WASD)', () => {
         const manager = new InputManager();
 
         // Emulate Key Press for P1
-        const eventUp = new dom.window.KeyboardEvent('keydown', { key: 'ArrowUp', code: 'ArrowUp' });
+        const eventUp = new KeyboardEvent('keydown', { key: 'ArrowUp', code: 'ArrowUp' });
         window.dispatchEvent(eventUp);
 
         // Check P1
@@ -27,7 +23,7 @@ describe('Multiplayer Input & Physics', () => {
         expect(p2Input.accel).toBe(0);
 
         // Emulate Key Press for P2
-        const eventW = new dom.window.KeyboardEvent('keydown', { key: 'w', code: 'KeyW' });
+        const eventW = new KeyboardEvent('keydown', { key: 'w', code: 'KeyW' });
         window.dispatchEvent(eventW);
 
         // Check P2
@@ -39,7 +35,7 @@ describe('Multiplayer Input & Physics', () => {
         expect(p1Input.accel).toBe(1);
 
         // Release P1
-        const eventUpRel = new dom.window.KeyboardEvent('keyup', { key: 'ArrowUp', code: 'ArrowUp' });
+        const eventUpRel = new KeyboardEvent('keyup', { key: 'ArrowUp', code: 'ArrowUp' });
         window.dispatchEvent(eventUpRel);
         p1Input = manager.getInput(0);
         expect(p1Input.accel).toBe(0);

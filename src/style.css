@@ -6,14 +6,89 @@
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
   overflow: hidden;
+  background-color: #222;
+  color: #eee;
+  font-family: 'Segoe UI', sendMessage, sans-serif;
 }
 
 #app {
   width: 100vw;
   height: 100vh;
+  position: relative;
+}
+
+canvas {
+  display: block;
+}
+
+/* UI Screens */
+.screen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 10;
+}
+
+.screen.hidden {
+  display: none;
+}
+
+h1,
+h2 {
+  margin-bottom: 2rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.menu-item {
+  margin: 10px 0;
+  padding: 10px 20px;
+  background: #444;
+  border: 2px solid #666;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1.2rem;
+  min-width: 200px;
+  text-align: center;
+  user-select: none;
+  transition: background 0.2s, transform 0.1s;
+}
+
+.menu-item:hover {
+  background: #555;
+  transform: scale(1.05);
+}
+
+.menu-item.active {
+  background: #4CAF50;
+  border-color: #45a049;
+}
+
+.control-row {
+  display: flex;
+  align-items: center;
+  margin: 10px 0;
+  gap: 15px;
+}
+
+.control-label {
+  min-width: 150px;
+  text-align: right;
+}
+
+select {
+  padding: 8px;
+  font-size: 1rem;
+  background: #333;
+  color: white;
+  border: 1px solid #555;
+  border-radius: 4px;
 }
