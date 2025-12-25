@@ -213,3 +213,28 @@ export function createWorldTexture(): THREE.CanvasTexture {
   texture.minFilter = THREE.NearestFilter;
   return texture;
 }
+
+export function createWaterTexture(): THREE.CanvasTexture {
+  const size = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+
+  ctx.fillStyle = '#0277bd';
+  ctx.fillRect(0, 0, size, size);
+
+  ctx.fillStyle = '#4fc3f7';
+  // Simple pattern
+  for (let i = 0; i < 10; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    ctx.fillRect(x, y, 4, 2);
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.magFilter = THREE.NearestFilter;
+  return texture;
+}

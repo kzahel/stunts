@@ -1,8 +1,7 @@
 import * as THREE from 'three';
 import type { WorldState } from '../../shared/Schema';
 import { Track, TRACK_SIZE, TileType, TILE_SIZE } from '../../shared/Track';
-import { createWorldTexture } from './TextureGenerator';
-import { drawWater } from './WaterUtils';
+import { createWorldTexture, createWaterTexture } from './TextureGenerator';
 
 export class GameRenderer {
   private scene: THREE.Scene;
@@ -21,7 +20,8 @@ export class GameRenderer {
   private editorEnabled: boolean = false;
   private activeCamera: THREE.Camera;
   private worldTexture: THREE.CanvasTexture | null = null;
-  private frame: number = 0;
+  private dedicatedWaterTexture: THREE.CanvasTexture | null = null;
+  private waterGroup: THREE.Group | null = null;
 
   // ... (constructor remains mostly same, but remove single carMesh creation)
 
@@ -138,11 +138,27 @@ export class GameRenderer {
     texture.colorSpace = THREE.SRGBColorSpace;
     this.worldTexture = texture;
 
+    // Dedicated Water Texture
+    this.dedicatedWaterTexture = createWaterTexture();
+    this.dedicatedWaterTexture.colorSpace = THREE.SRGBColorSpace;
+
+    // Clear old water group if exists
+    if (this.waterGroup) {
+      this.trackGroup.remove(this.waterGroup);
+    }
+    this.waterGroup = new THREE.Group();
+    this.trackGroup.add(this.waterGroup);
+
     const vertices: number[] = [];
     const uvs: number[] = [];
 
+    const waterVertices: number[] = [];
+    const waterUVs: number[] = [];
+
     // Helper to add Quad with UVs
     const addQuad = (
+      targetVerts: number[],
+      targetUVs: number[],
       x: number,
       y: number, // Grid Coordinates
       hNW: number,
@@ -151,6 +167,7 @@ export class GameRenderer {
       hSW: number,
       orientation: number,
       type: TileType,
+      isWater: boolean,
     ) => {
       // Coordinates in World (Scale by TILE_SIZE)
       const x1 = x * TILE_SIZE;
@@ -167,13 +184,30 @@ export class GameRenderer {
 
       // Triangle 1: NW, SW, SE
       // Triangle 2: NW, SE, NE
-      vertices.push(x1, hNW, z1);
-      vertices.push(x2, hSW, z2);
-      vertices.push(x3, hSE, z3);
+      targetVerts.push(x1, hNW, z1);
+      targetVerts.push(x2, hSW, z2);
+      targetVerts.push(x3, hSE, z3);
 
-      vertices.push(x1, hNW, z1);
-      vertices.push(x3, hSE, z3);
-      vertices.push(x4, hNE, z4);
+      targetVerts.push(x1, hNW, z1);
+      targetVerts.push(x3, hSE, z3);
+      targetVerts.push(x4, hNE, z4);
+
+      // UVs
+      if (isWater) {
+        // Simple UV mapping for repeating texture
+        // Map whole tile to whole texture (0..1)
+        // But maybe repeat it? 64x64 texture on 10x10 tile?
+        // Let's use world coords for continuous water?
+        // Or simple 0..1 per tile.
+        targetUVs.push(0, 1);
+        targetUVs.push(0, 0);
+        targetUVs.push(1, 0);
+
+        targetUVs.push(0, 1);
+        targetUVs.push(1, 0);
+        targetUVs.push(1, 1);
+        return;
+      }
 
       // UV Mapping
       // Atlas: 2x2
@@ -244,6 +278,8 @@ export class GameRenderer {
           vMax = 0.5;
           break;
         case TileType.Water:
+          // Should be handled by isWater block above now?
+          // Keeping just in case, but unused if we filter correctly.
           // Col 2, Bot (0.5..0.75, 0..0.5)
           uMin = 0.5;
           vMin = 0;
@@ -313,14 +349,14 @@ export class GameRenderer {
       const cNE = rotatedCorners[3];
 
       // Tri 1: NW, SW, SE
-      uvs.push(cNW.u, cNW.v);
-      uvs.push(cSW.u, cSW.v);
-      uvs.push(cSE.u, cSE.v);
+      targetUVs.push(cNW.u, cNW.v);
+      targetUVs.push(cSW.u, cSW.v);
+      targetUVs.push(cSE.u, cSE.v);
 
       // Tri 2: NW, SE, NE
-      uvs.push(cNW.u, cNW.v);
-      uvs.push(cSE.u, cSE.v);
-      uvs.push(cNE.u, cNE.v);
+      targetUVs.push(cNW.u, cNW.v);
+      targetUVs.push(cSE.u, cSE.v);
+      targetUVs.push(cNE.u, cNE.v);
     };
 
     for (let x = 0; x < TRACK_SIZE; x++) {
@@ -329,12 +365,46 @@ export class GameRenderer {
         if (!tile) continue;
 
         const corners = track.getTileCornerHeights(x, y);
-        addQuad(x, y, corners.nw, corners.ne, corners.se, corners.sw, tile.orientation, tile.type);
+
+        if (tile.type === TileType.Water) {
+          addQuad(
+            waterVertices,
+            waterUVs,
+            x,
+            y,
+            corners.nw,
+            corners.ne,
+            corners.se,
+            corners.sw,
+            tile.orientation,
+            tile.type,
+            true,
+          );
+        } else {
+          addQuad(
+            vertices,
+            uvs,
+            x,
+            y,
+            corners.nw,
+            corners.ne,
+            corners.se,
+            corners.sw,
+            tile.orientation,
+            tile.type,
+            false,
+          );
+        }
       }
     }
 
     // Create Mesh
-    const createMesh = (verts: number[], uvCoords: number[]) => {
+    const createMesh = (
+      verts: number[],
+      uvCoords: number[],
+      tex: THREE.Texture,
+      parent: THREE.Group,
+    ) => {
       if (verts.length === 0) return;
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
@@ -342,7 +412,7 @@ export class GameRenderer {
       geo.computeVertexNormals();
 
       const mat = new THREE.MeshStandardMaterial({
-        map: texture,
+        map: tex,
         color: 0xffffff,
         side: THREE.FrontSide,
         flatShading: false, // Smooth shading looks better on curved road? Or keep flat.
@@ -350,10 +420,15 @@ export class GameRenderer {
       });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.receiveShadow = true;
-      this.trackGroup.add(mesh);
+      parent.add(mesh);
     };
 
-    createMesh(vertices, uvs);
+    createMesh(vertices, uvs, this.worldTexture, this.trackGroup);
+
+    // Create Water Mesh
+    if (this.waterGroup) {
+      createMesh(waterVertices, waterUVs, this.dedicatedWaterTexture, this.waterGroup);
+    }
   }
 
   private createCarMesh(color: number): THREE.Group {
@@ -484,19 +559,11 @@ export class GameRenderer {
   }
 
   public render(state: WorldState, _alpha: number) {
-    // Animate Water
-    if (this.worldTexture && this.worldTexture.image) {
-      this.frame++;
-      // Update every 5 frames for slower animation? Or every frame.
-      // 60FPS -> frame++ every frame.
-      const ctx = this.worldTexture.image.getContext('2d');
-      if (ctx) {
-        // Water is at Col 2, Bot (Index 6 roughly if linear? No, grid)
-        // Utils uses: x, y, size
-        // TextureGenerator: half = 256. x = 512, y = 256.
-        drawWater(ctx, 512, 256, 256, this.frame);
-        this.worldTexture.needsUpdate = true;
-      }
+    // Animate Water (Texture Offset)
+    if (this.dedicatedWaterTexture) {
+      // Flow direction
+      this.dedicatedWaterTexture.offset.y += 0.002;
+      this.dedicatedWaterTexture.offset.x += 0.001;
     }
 
     this.updateCarMeshes(state.players.length);
