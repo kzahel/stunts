@@ -6,14 +6,28 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "type:check": "tsc --noEmit",
+    "lint:check": "eslint . --max-warnings 0",
+    "lint:fix": "eslint . --fix",
+    "format:check": "prettier --check . --log-level warn",
+    "format:fix": "prettier --write . --log-level warn",
+    "test": "vitest run --reporter=dot",
+    "code:check": "npm run type:check && npm run format:check && npm run lint:check && npm run test",
+    "code:fix": "npm run format:fix && npm run lint:fix"
   },
   "devDependencies": {
     "@types/jsdom": "^27.0.0",
     "@types/node": "^25.0.3",
     "@types/three": "^0.182.0",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.4",
+    "globals": "^16.5.0",
     "jsdom": "^27.3.0",
+    "prettier": "^3.7.4",
     "typescript": "~5.9.3",
+    "typescript-eslint": "^8.50.1",
     "vite": "^7.2.4",
     "vitest": "^4.0.16"
   },

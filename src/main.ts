@@ -1,4 +1,3 @@
-
 import './style.css';
 import { GameLoop } from './engine/GameLoop';
 import { PhysicsEngine } from './engine/Physics';
@@ -17,7 +16,7 @@ const AppState = {
   PLAYING: 1,
   PAUSED: 2,
 } as const;
-type AppState = typeof AppState[keyof typeof AppState];
+type AppState = (typeof AppState)[keyof typeof AppState];
 
 let appState: AppState = AppState.MENU;
 
@@ -37,17 +36,18 @@ const ui = new UIManager(
   document.body,
   settingsManager,
   (settings) => startGame(settings), // On Start
-  () => { // On Options Closed (Back)
+  () => {
+    // On Options Closed (Back)
     if (appState === AppState.PAUSED) {
       appState = AppState.PLAYING;
     } else if (appState === AppState.MENU) {
       // Already handled by UI
     }
-  }
+  },
 );
 
 // Initialization
-(async () => {
+void (async () => {
   await settingsManager.load();
 
   // Check for URL override
@@ -106,7 +106,7 @@ window.addEventListener('keydown', (e) => {
           simState = null;
           ui.showStartupScreen();
         },
-        'Return to Game'
+        'Return to Game',
       );
     }
   }
@@ -125,7 +125,7 @@ const loop = new GameLoop(
     if (simState) {
       renderer.render(simState, alpha);
     }
-  }
+  },
 );
 
 loop.start();

@@ -59,7 +59,9 @@ h2 {
   min-width: 200px;
   text-align: center;
   user-select: none;
-  transition: background 0.2s, transform 0.1s;
+  transition:
+    background 0.2s,
+    transform 0.1s;
 }
 
 .menu-item:hover {
@@ -68,7 +70,7 @@ h2 {
 }
 
 .menu-item.active {
-  background: #4CAF50;
+  background: #4caf50;
   border-color: #45a049;
 }
 
