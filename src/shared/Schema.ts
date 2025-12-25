@@ -15,6 +15,7 @@ export interface PhysicalBody {
   velocity: Vector2;
   angle: number; // radians
   angularVelocity: number; // Added angularVelocity
+  steer: number; // Added for visual wheel rotation
 }
 
 export interface WorldState {
@@ -35,7 +36,8 @@ export function lerpBody(a: PhysicalBody, b: PhysicalBody, t: number): PhysicalB
       x: lerp(a.velocity.x, b.velocity.x, t),
       y: lerp(a.velocity.y, b.velocity.y, t)
     },
-    angularVelocity: lerp(a.angularVelocity, b.angularVelocity, t)
+    angularVelocity: lerp(a.angularVelocity, b.angularVelocity, t),
+    steer: lerp(a.steer, b.steer, t)
   };
 }
 
@@ -57,5 +59,6 @@ export const createInitialState = (playerCount: number = 1): WorldState => ({
     velocity: { x: 0, y: 0 },
     angle: 0,
     angularVelocity: 0, // Added angularVelocity
+    steer: 0,
   })),
 });

@@ -91,6 +91,7 @@ export class UIManager {
       const options = [
         { val: ControlType.WASD, text: 'Keyboard (WASD)' },
         { val: ControlType.ARROWS, text: 'Keyboard (Arrows)' },
+        { val: ControlType.IJKL, text: 'Keyboard (IJKL)' },
       ];
       if (hasGamepad) {
         options.push({ val: ControlType.GAMEPAD, text: 'Gamepad' });

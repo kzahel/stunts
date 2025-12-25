@@ -57,17 +57,19 @@ export class InputManager {
         if (this.keysPressed.has('ArrowLeft')) input.steer -= 1;
         if (this.keysPressed.has('ArrowRight')) input.steer += 1;
         break;
+      case ControlType.IJKL:
+        if (this.keysPressed.has('KeyI')) input.accel += 1;
+        if (this.keysPressed.has('KeyK')) input.accel -= 1;
+        if (this.keysPressed.has('KeyJ')) input.steer -= 1;
+        if (this.keysPressed.has('KeyL')) input.steer += 1;
+        break;
       case ControlType.GAMEPAD: {
         const idx = config.gamepadIndex ?? 0;
         const pad = this.gamepads[idx];
         if (pad) {
           const DEADZONE = 0.1;
           const axisX = pad.axes[0]; // Steer
-          const axisY = pad.axes[1]; // Accel (-1 is Up)
 
-          if (Math.abs(axisY) > DEADZONE) {
-            input.accel -= axisY;
-          }
           if (Math.abs(axisX) > DEADZONE) {
             input.steer += axisX;
           }

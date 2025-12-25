@@ -15,10 +15,11 @@ export class LocalStorageStore implements SettingsStore {
   }
 }
 
-export type ControlType = 'WASD' | 'ARROWS' | 'GAMEPAD';
+export type ControlType = 'WASD' | 'ARROWS' | 'IJKL' | 'GAMEPAD';
 export const ControlType = {
   WASD: 'WASD' as ControlType,
   ARROWS: 'ARROWS' as ControlType,
+  IJKL: 'IJKL' as ControlType,
   GAMEPAD: 'GAMEPAD' as ControlType,
 };
 

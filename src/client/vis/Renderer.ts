@@ -151,6 +151,12 @@ export class GameRenderer {
     wheelOffsets.forEach((offset) => {
       const wheel = new THREE.Mesh(wheelGeo, blackMat);
       wheel.position.set(offset.x, 0.4, offset.z);
+      // Name wheels to find them later. Front are index 0,1 (z > 0)
+      if (offset.z > 0) {
+        wheel.name = 'WheelFront';
+      } else {
+        wheel.name = 'WheelRear';
+      }
       wheel.castShadow = true;
       group.add(wheel);
     });
@@ -212,6 +218,27 @@ export class GameRenderer {
       // Need to negate physics angle because Physics(+Angle) -> +Z, while Three(+Rotation) -> -Z.
       // Offset of PI/2 aligns model (+Z) to Physics (+X).
       group.rotation.y = -player.angle + Math.PI / 2;
+
+      // Update Wheel Rotation (Steering)
+      group.children.forEach((child) => {
+        if (child.name === 'WheelFront') {
+          // Input steer is -1 (left) to 1 (right).
+          // Left turn: wheel rotates positive Y (CCW from top)
+          // Steer 1 -> Right -> Negative Y?
+          // Let's verify standard ThreeJS rotation. +Y is CCW.
+          // If we steer Left (KeyA), input.steer is -1.
+          // Wheel should point left.
+          // Group is rotated -player.angle + PI/2.
+          // Wheel is child of Group.
+          // If we rotate wheel +Y, it turns Left relative to car.
+          // So steer(-1) -> Rotation(+Y).
+          // Max steer angle around 30 degrees (0.5 radians).
+          // So rotation.y = -player.steer * 0.5;
+
+          child.rotation.y = -(player.steer || 0) * 0.5;
+        }
+      });
+
       group.visible = true;
     });
 
