@@ -1,4 +1,3 @@
-
 import type { WorldState, Input, PhysicalBody } from '../shared/Schema';
 import type { Track } from '../shared/Track';
 import { TileType, TILE_SIZE } from '../shared/Track';
@@ -106,11 +105,16 @@ export class PhysicsEngine {
     if (!tile) return 0.5;
 
     switch (tile.type) {
-      case TileType.Grass: return 0.4;
-      case TileType.Road: return 2.5;
-      case TileType.Start: return 2.5;
-      case TileType.Finish: return 2.5;
-      default: return 0.5;
+      case TileType.Grass:
+        return 0.4;
+      case TileType.Road:
+        return 2.5;
+      case TileType.Start:
+        return 2.5;
+      case TileType.Finish:
+        return 2.5;
+      default:
+        return 0.5;
     }
   }
 
@@ -123,7 +127,7 @@ export class PhysicsEngine {
 
     // NOTE: For full 3D rotation we need quaternions or 3x3 matrix.
     // Given we store Yaw, Pitch, Roll, we can construct the Forward, Up, Right vectors.
-    // Simplified rotation sequence: Yaw(Z) * Pitch(X) * Roll(Z_local) ?? 
+    // Simplified rotation sequence: Yaw(Z) * Pitch(X) * Roll(Z_local) ??
     // Standard vehicle order: Yaw -> Pitch -> Roll
 
     // However, purely compounding Euler angles leads to Gimbal Lock.
@@ -189,9 +193,9 @@ export class PhysicsEngine {
 
     // Torque Accumulator (Local Space? Or World?)
     // Easier to accumulate Torque in Local Space [Roll, Pitch, Yaw]
-    let torqueRoll = 0;  // X axis
+    let torqueRoll = 0; // X axis
     let torquePitch = 0; // Y axis
-    let torqueYaw = 0;   // Z axis
+    let torqueYaw = 0; // Z axis
 
     // Apply Gravity
     forceZ += -9.81 * CAR_CFG.mass * 2.5; // Extra gravity for snappy feel
@@ -205,7 +209,13 @@ export class PhysicsEngine {
       { id: 'FL', lx: halfBase, ly: halfTrack, steer: true, drive: CAR_CFG.driveTrain !== 'RWD' },
       { id: 'FR', lx: halfBase, ly: -halfTrack, steer: true, drive: CAR_CFG.driveTrain !== 'RWD' },
       { id: 'RL', lx: -halfBase, ly: halfTrack, steer: false, drive: CAR_CFG.driveTrain !== 'FWD' },
-      { id: 'RR', lx: -halfBase, ly: -halfTrack, steer: false, drive: CAR_CFG.driveTrain !== 'FWD' }
+      {
+        id: 'RR',
+        lx: -halfBase,
+        ly: -halfTrack,
+        steer: false,
+        drive: CAR_CFG.driveTrain !== 'FWD',
+      },
     ];
 
     let wheelsOnGround = 0;
@@ -221,9 +231,9 @@ export class PhysicsEngine {
       // Actually suspension mount point is usually distinct.
       // Let's assume mount point is at height 0 relative to CM (Center of Mass).
 
-      const wx = body.x + (fwdX * w.lx) + (rightX * w.ly);
-      const wy = body.y + (fwdY * w.lx) + (rightY * w.ly);
-      const wz = body.z + (fwdZ * w.lx) + (rightZ * w.ly); // Mount point Z
+      const wx = body.x + fwdX * w.lx + rightX * w.ly;
+      const wy = body.y + fwdY * w.lx + rightY * w.ly;
+      const wz = body.z + fwdZ * w.lx + rightZ * w.ly; // Mount point Z
 
       // 2. Raycast Down
       const groundH = this.getHeightAt(wx, wy, track);
@@ -241,7 +251,7 @@ export class PhysicsEngine {
 
         // 3. Suspension Force
         // Spring Compression
-        // distToGround = Current Length. 
+        // distToGround = Current Length.
         // Compression = RestLength - CurrentLength
         // Actually we include wheel radius.
         // Suspension extends from Mount downwards.
@@ -276,11 +286,11 @@ export class PhysicsEngine {
         // Omega_world approx?
         // Converting Local Angular Velocity to World is complex without quaternions.
         // Let's approximate:
-        // V_point_z approx = body.vz + (body.vPitch * w.lx) - (body.vRoll * w.ly) 
+        // V_point_z approx = body.vz + (body.vPitch * w.lx) - (body.vRoll * w.ly)
         // (Pitch up -> Front moves Up)
         // (Roll right -> Left moves Up)
 
-        const pointVz = body.vz + (body.vPitch * w.lx) - (body.vRoll * w.ly);
+        const pointVz = body.vz + body.vPitch * w.lx - body.vRoll * w.ly;
         const damperForce = -CAR_CFG.suspensionDamping * pointVz;
 
         const suspensionForce = springForce + damperForce;
@@ -309,7 +319,6 @@ export class PhysicsEngine {
         forceZ += finalSuspForce;
         torqueRoll -= w.ly * finalSuspForce; // Left (+y) Push Up -> Decrease Roll (Left Up)
         torquePitch += w.lx * finalSuspForce; // Front (+x) Push Up -> Increase Pitch (Nose Up)
-
 
         // 4. Tire Friction (Longitudinal & Lateral)
         // Traction is applied in the Ground Plane (tangent).
@@ -340,11 +349,12 @@ export class PhysicsEngine {
         const wheelSy = Math.cos(wheelHeading);
 
         // Project Velocity into Wheel Frame
-        const velForward = (patchVx * wheelRx) + (patchVy * wheelRy);
-        const velSide = (patchVx * wheelSx) + (patchVy * wheelSy);
+        const velForward = patchVx * wheelRx + patchVy * wheelRy;
+        const velSide = patchVx * wheelSx + patchVy * wheelSy;
 
         // Forces
-        const frictionLimit = finalSuspForce * this.getSurfaceFriction(wx, wy, track) * CAR_CFG.frictionCoeff;
+        const frictionLimit =
+          finalSuspForce * this.getSurfaceFriction(wx, wy, track) * CAR_CFG.frictionCoeff;
 
         // Lateral (Cornering)
         let latForce = -velSide * CAR_CFG.mass * 10; // Simple stiff spring for cornering
@@ -388,8 +398,6 @@ export class PhysicsEngine {
         forceX += fWx;
         forceY += fWy;
 
-
-
         // Add Torque from Friction
         // Torque Z (Yaw)
         // Moment arm in World Space:
@@ -410,9 +418,9 @@ export class PhysicsEngine {
     body.vz += forceZ * invMass * dt;
 
     // Drag
-    body.velocity.x *= (1 - 0.01);
-    body.velocity.y *= (1 - 0.01);
-    body.vz *= (1 - 0.015); // Air resistance Z
+    body.velocity.x *= 1 - 0.01;
+    body.velocity.y *= 1 - 0.01;
+    body.vz *= 1 - 0.015; // Air resistance Z
 
     // Update Position
     body.x += body.velocity.x * dt;
@@ -430,13 +438,13 @@ export class PhysicsEngine {
     // Angular
     // Inertia Tensor approx (Box)
     // Ixx (Roll), Iyy (Pitch), Izz (Yaw)
-    const Ixx = CAR_CFG.mass * (CAR_CFG.trackWidth ** 2) / 6; // Approx
-    const Iyy = CAR_CFG.mass * (CAR_CFG.wheelBase ** 2) / 6;
-    const Izz = CAR_CFG.mass * (CAR_CFG.wheelBase ** 2 + CAR_CFG.trackWidth ** 2) / 12;
+    const Ixx = (CAR_CFG.mass * CAR_CFG.trackWidth ** 2) / 6; // Approx
+    const Iyy = (CAR_CFG.mass * CAR_CFG.wheelBase ** 2) / 6;
+    const Izz = (CAR_CFG.mass * (CAR_CFG.wheelBase ** 2 + CAR_CFG.trackWidth ** 2)) / 12;
 
-    body.vRoll += torqueRoll / Ixx * dt;
-    body.vPitch += torquePitch / Iyy * dt;
-    body.angularVelocity += torqueYaw / Izz * dt;
+    body.vRoll += (torqueRoll / Ixx) * dt;
+    body.vPitch += (torquePitch / Iyy) * dt;
+    body.angularVelocity += (torqueYaw / Izz) * dt;
 
     // Angular Damping
     body.vRoll *= 0.95;

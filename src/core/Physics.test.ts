@@ -101,8 +101,6 @@ describe('PhysicsEngine', () => {
       stateHandbrake = physics.step(stateHandbrake, [turnHandbrake], dt);
     }
 
-
-
     // Handbrake should rotate MORE (slide) than normal grip turning which might understeer or be stable
     // Actually with RWD normal might oversteer too, but handbrake locks rear so it should slide out faster initially?
     // Or at least show a difference.
@@ -111,8 +109,14 @@ describe('PhysicsEngine', () => {
     expect(stateHandbrake.players[0].skidding).toBe(true);
 
     // Check it stopped/slowed
-    const speedNormal = Math.hypot(stateNormal.players[0].velocity.x, stateNormal.players[0].velocity.y);
-    const speedHandbrake = Math.hypot(stateHandbrake.players[0].velocity.x, stateHandbrake.players[0].velocity.y);
+    const speedNormal = Math.hypot(
+      stateNormal.players[0].velocity.x,
+      stateNormal.players[0].velocity.y,
+    );
+    const speedHandbrake = Math.hypot(
+      stateHandbrake.players[0].velocity.x,
+      stateHandbrake.players[0].velocity.y,
+    );
 
     expect(speedHandbrake).toBeLessThan(speedNormal);
   });

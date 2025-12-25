@@ -58,7 +58,10 @@ export class Track {
     this.heightMap[vx * (TRACK_SIZE + 1) + vy] = h;
   }
 
-  public getTileCornerHeights(x: number, y: number): { nw: number; ne: number; se: number; sw: number } {
+  public getTileCornerHeights(
+    x: number,
+    y: number,
+  ): { nw: number; ne: number; se: number; sw: number } {
     // Tile (x, y) has corners:
     // NW: (x, y)
     // NE: (x+1, y)
@@ -171,7 +174,7 @@ export class Track {
   public serialize(): any {
     return {
       tiles: this.tiles,
-      heightMap: Array.from(this.heightMap)
+      heightMap: Array.from(this.heightMap),
     };
   }
 

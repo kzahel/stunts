@@ -52,10 +52,10 @@ const editor = new Editor(track, renderer, renderer.domElement, ui, () => {
   // On Map Change: Broadcast to server
   if (clients.length > 0) {
     const payload = track.serialize();
-    clients.forEach(c => {
+    clients.forEach((c) => {
       c.send({
         type: ClientMessageType.MAP_UPDATE,
-        payload: payload
+        payload: payload,
       });
     });
   }
@@ -71,7 +71,6 @@ let simState: SimState | null = null;
 const serverUpdates: Array<{ tick: number; time: number; state: SimState }> = [];
 
 // UI Manager (Already Initialized Above)
-
 
 // Initialization
 void (async () => {
@@ -246,7 +245,6 @@ window.addEventListener('mousedown', (_e) => {
     if (editor.isActive()) editor.onMouseDown();
   }
 });
-
 
 // Game Loop
 const loop = new GameLoop(

@@ -31,7 +31,13 @@ export interface MapUpdateMessage extends ClientMessage {
   payload: {
     // Simple serialization of track? Or just grid height array?
     // Let's send the whole grid for simplicity now
-    tiles: { x: number, y: number, type: number, height: number, corners: { nw: number, ne: number, sw: number, se: number } }[]
+    tiles: {
+      x: number;
+      y: number;
+      type: number;
+      height: number;
+      corners: { nw: number; ne: number; sw: number; se: number };
+    }[];
     // Or simpler: Just a list of modifications?
     // "Full Sync" is safest for now.
     // Let's assume payload is whatever Track.serialize() produces?
@@ -39,7 +45,7 @@ export interface MapUpdateMessage extends ClientMessage {
     width: number;
     height: number;
     data: any[];
-  }
+  };
 }
 
 export const ServerMessageType = {
@@ -68,4 +74,3 @@ export interface StateMessage extends ServerMessage {
   type: typeof ServerMessageType.STATE;
   payload: WorldState;
 }
-

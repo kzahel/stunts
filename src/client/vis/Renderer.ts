@@ -132,9 +132,13 @@ export class GameRenderer {
 
     // Helper to add Quad
     const addQuad = (
-      x: number, y: number, // Grid Coordinates
-      hNW: number, hNE: number, hSE: number, hSW: number,
-      vertices: number[]
+      x: number,
+      y: number, // Grid Coordinates
+      hNW: number,
+      hNE: number,
+      hSE: number,
+      hSW: number,
+      vertices: number[],
     ) => {
       // V1(NW) -> V2(SW) -> V3(SE)
       // V1(NW) -> V3(SE) -> V4(NE)
@@ -180,7 +184,7 @@ export class GameRenderer {
       if (vertices.length === 0) return;
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-      geo.computeVertexNormals(); // Smooth shading if shared vertices? 
+      geo.computeVertexNormals(); // Smooth shading if shared vertices?
       // Current implementation does NOT share vertices (triangle soup), so this computes Flat shading per face effectively if vertices are duplicated.
       // Wait, 'computeVertexNormals' on triangle soup (non-indexed) will create normals per vertex.
       // If vertices are distinct (position not shared by index), they will be flat shaded?
@@ -337,7 +341,7 @@ export class GameRenderer {
       const group = this.carMeshes[i];
 
       // Use Physics Position directly (3D)
-      group.position.set(player.x, player.z, player.y);
+      group.position.set(player.x, player.z - 0.6, player.y); // Visual offset to align wheels with ground (Model Center vs Physics COM)
 
       // Orientation (Yaw, Pitch, Roll)
       // Order: Yaw (Y) -> Pitch (X) -> Roll (Z)
@@ -347,9 +351,9 @@ export class GameRenderer {
       // Wait, let's verify Coordinates transform.
       // Physics: X,Y ground, Z height.
       // ThreeJS: X right, Y up, Z forward?
-      // Renderer Setup: 
-      //   addQuad: params (x, y, cornerHeights). 
-      //   vertices.push(x1, hNW, z1) -> (X, Y, Z). 
+      // Renderer Setup:
+      //   addQuad: params (x, y, cornerHeights).
+      //   vertices.push(x1, hNW, z1) -> (X, Y, Z).
       //   So Height is Y in ThreeJS. Ground is X,Z.
       //   Physics X -> ThreeJS X.
       //   Physics Y -> ThreeJS Z.
@@ -363,7 +367,7 @@ export class GameRenderer {
       // Physics Roll (roll) is rotation around X (Forward) -> ThreeJS 'Z'?
 
       // Let's assume standard vehicle set:
-      // Yaw: around vertical axis. (ThreeJS Y). 
+      // Yaw: around vertical axis. (ThreeJS Y).
       //   Physics Angle 0 = +X. +Angle = CCW.
       //   ThreeJS: Rotate Y. +Angle = CCW around Y.
       //   Car Model faces -Z. +X is -90deg.
@@ -383,17 +387,26 @@ export class GameRenderer {
       //   Used (w.ly * Force). Left wheel pushes UP -> +Roll Torque.
       //   If +Roll, Left side goes up. Car tilts Right.
       //   So +Roll is "Roll Right".
-      //   ThreeJS: Rotate around -Z. 
+      //   ThreeJS: Rotate around -Z.
       //   Looking down -Z. CCW is +.
       //   We want Clockwise. So -Roll?
 
       // Let's use Quaternions to be safe.
-      const qYaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -player.angle + Math.PI / 2);
-      const qPitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -player.pitch); // Adjust sign: Physics +Pitch is Up, Renderer +Pitch is Down
-      const qRoll = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), player.roll); // Adjust sign: Physics -Roll is LeftUp, Renderer -Roll is LeftUp
+      const qYaw = new THREE.Quaternion().setFromAxisAngle(
+        new THREE.Vector3(0, 1, 0),
+        -player.angle + Math.PI / 2,
+      );
+      const qPitch = new THREE.Quaternion().setFromAxisAngle(
+        new THREE.Vector3(1, 0, 0),
+        -player.pitch,
+      ); // Adjust sign: Physics +Pitch is Up, Renderer +Pitch is Down
+      const qRoll = new THREE.Quaternion().setFromAxisAngle(
+        new THREE.Vector3(0, 0, 1),
+        player.roll,
+      ); // Adjust sign: Physics -Roll is LeftUp, Renderer -Roll is LeftUp
 
       // Order: Yaw -> Pitch -> Roll?
-      // group.quaternion.copy(qYaw.multiply(qPitch).multiply(qRoll)); 
+      // group.quaternion.copy(qYaw.multiply(qPitch).multiply(qRoll));
       // Note: multiply applies right-to-left in local? qA.multiply(qB) -> apply A then B?
       // ThreeJS: qA * qB means Apply B then A.
       // We want: Local Roll, then Local Pitch, then World Yaw.
@@ -411,7 +424,6 @@ export class GameRenderer {
           child.rotation.y = -(player.steer || 0) * 0.5;
         }
       });
-
 
       group.visible = true;
 
@@ -476,7 +488,8 @@ export class GameRenderer {
         });
 
         // Limit total skids to prevent crash
-        if (this.skidGroup.children.length > 500) { // Reduced limit
+        if (this.skidGroup.children.length > 500) {
+          // Reduced limit
           this.skidGroup.remove(this.skidGroup.children[0]);
           this.skidGroup.remove(this.skidGroup.children[0]);
         }

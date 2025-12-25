@@ -51,7 +51,7 @@ export class Room {
 
     this.gameLoop = new GameLoop(
       (dt) => this.update(dt),
-      () => { }, // No render on server
+      () => {}, // No render on server
       this.tickRate, // Target FPS/TPS
     );
     this.gameLoop.start();
@@ -128,20 +128,20 @@ export class Room {
 
     if (msg.type === ClientMessageType.MAP_UPDATE) {
       // Apply map update
-      const mapMsg = msg as { type: string, payload: any }; // Type assertion
+      const mapMsg = msg as { type: string; payload: any }; // Type assertion
       // Ideally validate
 
       // Apply to server track
       this.track.deserialize(mapMsg.payload);
 
-      // Broadcast to others? 
+      // Broadcast to others?
       // Or just let them know?
       // Ideally we broadcast a MAP_SYNC or relay the update.
       // Let's relay.
       // Note: We should probably only allow "Host" to update map, but for now any client.
       this.broadcast({
         type: ServerMessageType.MAP_SYNC,
-        payload: mapMsg.payload
+        payload: mapMsg.payload,
       });
     }
   }
