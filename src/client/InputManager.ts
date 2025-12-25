@@ -60,6 +60,10 @@ export class InputManager {
     return currentlyPressed && !previouslyPressed;
   }
 
+  public isKeyDown(code: string): boolean {
+    return this.keysPressed.has(code);
+  }
+
   public getInput(playerIndex: number): Input {
     const input: Input = { accel: 0, steer: 0, handbrake: false };
     const config = this.playerConfigs.find((c) => c.playerId === playerIndex);

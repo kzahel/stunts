@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Track, TILE_SIZE, HEIGHT_STEP } from '../shared/Track';
+import { Track, TILE_SIZE, HEIGHT_STEP, TileType } from '../shared/Track';
 import { GameRenderer } from './vis/Renderer';
 import { UIManager } from './vis/UI';
 
@@ -9,9 +9,17 @@ export const EditorTool = {
   Lower: 2,
   Flatten: 3,
   Road: 4,
+  Place: 5,
 } as const;
 
 export type EditorTool = (typeof EditorTool)[keyof typeof EditorTool];
+
+export const PALETTE_ORDER: TileType[] = [
+  TileType.Road,
+  TileType.Grass,
+  TileType.Dirt,
+  TileType.Sand,
+];
 
 export class Editor {
   private track: Track;
@@ -21,6 +29,8 @@ export class Editor {
 
   private active: boolean = false;
   private currentTool: EditorTool = EditorTool.None;
+
+  private selectedTileType: TileType = TileType.Road; // Palette Selection
 
   // Interaction State
   private mouseX: number = 0;
@@ -113,10 +123,38 @@ export class Editor {
         name = '➖ FLATTEN (3)';
         break;
       case EditorTool.Road:
-        name = 'ROAD (4)';
+        name = `ROAD (4)`;
         break;
+      case EditorTool.Place: {
+        // Find name of current tile
+        let tileName = 'ROAD';
+        if (this.selectedTileType === TileType.Grass) tileName = 'GRASS';
+        if (this.selectedTileType === TileType.Dirt) tileName = 'DIRT';
+        if (this.selectedTileType === TileType.Sand) tileName = 'SAND';
+        name = `PLACE [${tileName}] (3)`;
+        break;
+      }
     }
+
+    // Append Palette info always if active?
+    if (this.active) {
+      let tileName = 'ROAD';
+      if (this.selectedTileType === TileType.Grass) tileName = 'GRASS';
+      if (this.selectedTileType === TileType.Dirt) tileName = 'DIRT';
+      if (this.selectedTileType === TileType.Sand) tileName = 'SAND';
+      name += ` | Palette: < ${tileName} >`;
+    }
+
     this.ui.updateEditorStatus(this.active, name);
+  }
+
+  public cycleTileType(direction: number) {
+    if (!this.active) return;
+    const idx = PALETTE_ORDER.indexOf(this.selectedTileType);
+    let newIdx = (idx + direction) % PALETTE_ORDER.length;
+    if (newIdx < 0) newIdx += PALETTE_ORDER.length;
+    this.selectedTileType = PALETTE_ORDER[newIdx];
+    this.updateUI();
   }
 
   public onMouseMove(e: MouseEvent) {
@@ -162,6 +200,10 @@ export class Editor {
     const tx = Math.floor(x / TILE_SIZE);
     const ty = Math.floor(z / TILE_SIZE);
     this.updateHighlight(tx, ty);
+  }
+
+  public getCursorGridPosition(): { x: number; y: number } {
+    return { x: this.currentTx, y: this.currentTy };
   }
 
   private updateHighlight(tx: number, ty: number) {
@@ -304,6 +346,18 @@ export class Editor {
         break;
       case EditorTool.Road:
         this.track.placeRoad(tx, ty);
+        this.renderer.initTrackOrUpdate(this.track);
+        this.notifyChange();
+        break;
+      case EditorTool.Place:
+        if (this.selectedTileType === TileType.Road) {
+          this.track.placeRoad(tx, ty); // Use smart road logic
+        } else {
+          // Retain height, just change type
+          const current = this.track.getTile(tx, ty);
+          const h = current ? current.height : 0;
+          this.track.setTile(tx, ty, this.selectedTileType, h, 0);
+        }
         this.renderer.initTrackOrUpdate(this.track);
         this.notifyChange();
         break;

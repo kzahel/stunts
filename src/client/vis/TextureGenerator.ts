@@ -1,23 +1,27 @@
 import * as THREE from 'three';
 
 export function createWorldTexture(): THREE.CanvasTexture {
-  const size = 512;
+  const width = 1024; // 4x2 Grid
+  const height = 512;
   const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
+  canvas.width = width;
+  canvas.height = height;
   const ctx = canvas.getContext('2d')!;
 
   // Clear (Debug Pink)
   ctx.fillStyle = '#ff00ff';
-  ctx.fillRect(0, 0, size, size);
+  ctx.fillRect(0, 0, width, height);
 
+  const size = 512; // Base Tile Block Size
   const half = size / 2;
 
-  // 4 Quadrants:
-  // Top-Left (0, 0): Grass
-  // Top-Right (half, 0): Road Straight
-  // Bottom-Left (0, half): Road Turn
-  // Bottom-Right (half, half): Road Intersection
+  // Grid Layout (Unit = half = 256px)
+  // Col 0: Grass (Top), Road Turn (Bot)
+  // Col 1: Road Straight (Top), Intersection (Bot)
+  // Col 2: Dirt (Top), Reserved (Bot)
+  // Col 3: Sand (Top), Reserved (Bot)
+
+  // 1. Grass (0, 0)
 
   // 1. Grass (Top-Left)
   // Fill Green
@@ -152,6 +156,37 @@ export function createWorldTexture(): THREE.CanvasTexture {
   ctx.fillStyle = '#777777';
   ctx.fillRect(10, 10, half - 20, half - 20);
 
+  // 4. Intersection (Bottom-Right of first block) -> Col 1, Bot
+  // Already drawn at translate(half, half)
+
+  ctx.restore();
+
+  // 5. Dirt (Col 2, Top) -> (half * 2, 0)
+  ctx.save();
+  ctx.translate(half * 2, 0);
+  ctx.fillStyle = '#5d4037'; // Dirt Brown
+  ctx.fillRect(0, 0, half, half);
+  // Noise
+  ctx.fillStyle = '#4e342e';
+  for (let i = 0; i < 200; i++) {
+    const x = Math.random() * half;
+    const y = Math.random() * half;
+    const s = 2 + Math.random() * 4;
+    ctx.fillRect(x, y, s, s);
+  }
+  ctx.restore();
+
+  // 6. Sand (Col 3, Top) -> (half * 3, 0)
+  ctx.save();
+  ctx.translate(half * 3, 0);
+  ctx.fillStyle = '#fbc02d'; // Sand Yellow
+  ctx.fillRect(0, 0, half, half);
+  // Ripples
+  ctx.fillStyle = '#f9a825';
+  for (let i = 0; i < 10; i++) {
+    const y = i * (half / 10) + Math.random() * 10;
+    ctx.fillRect(0, y, half, 2);
+  }
   ctx.restore();
 
   const texture = new THREE.CanvasTexture(canvas);

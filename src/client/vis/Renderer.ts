@@ -180,7 +180,7 @@ export class GameRenderer {
 
       let uMin = 0;
       let vMin = 0;
-      let uMax = 0.5;
+      let uMax = 0.25;
       let vMax = 0.5;
 
       // Handle Start/Finish as Road for now
@@ -191,33 +191,51 @@ export class GameRenderer {
 
       switch (mappingType) {
         case TileType.Grass:
+          // Col 0, Top (0..0.25, 0.5..1.0)
           uMin = 0;
           vMin = 0.5;
-          uMax = 0.5;
-          vMax = 1.0;
-          break;
-        case TileType.Road:
-          uMin = 0.5;
-          vMin = 0.5;
-          uMax = 1.0;
+          uMax = 0.25;
           vMax = 1.0;
           break;
         case TileType.RoadTurn:
+          // Col 0, Bot (0..0.25, 0..0.5)
           uMin = 0;
+          vMin = 0;
+          uMax = 0.25;
+          vMax = 0.5;
+          break;
+        case TileType.Road:
+          // Col 1, Top (0.25..0.5, 0.5..1.0)
+          uMin = 0.25;
+          vMin = 0.5;
+          uMax = 0.5;
+          vMax = 1.0;
+          break;
+        case TileType.RoadIntersection:
+          // Col 1, Bot (0.25..0.5, 0..0.5)
+          uMin = 0.25;
           vMin = 0;
           uMax = 0.5;
           vMax = 0.5;
           break;
-        case TileType.RoadIntersection:
+        case TileType.Dirt:
+          // Col 2, Top (0.5..0.75, 0.5..1.0)
           uMin = 0.5;
-          vMin = 0;
+          vMin = 0.5;
+          uMax = 0.75;
+          vMax = 1.0;
+          break;
+        case TileType.Sand:
+          // Col 3, Top (0.75..1.0, 0.5..1.0)
+          uMin = 0.75;
+          vMin = 0.5;
           uMax = 1.0;
-          vMax = 0.5;
+          vMax = 1.0;
           break;
         default: // Grass default
           uMin = 0;
           vMin = 0.5;
-          uMax = 0.5;
+          uMax = 0.25;
           vMax = 1.0;
           break;
       }

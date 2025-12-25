@@ -8,6 +8,8 @@ export const TileType = {
   RoadIntersection: 3,
   Start: 4,
   Finish: 5,
+  Dirt: 6,
+  Sand: 7,
 } as const;
 
 export type TileType = (typeof TileType)[keyof typeof TileType];

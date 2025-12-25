@@ -75,6 +75,7 @@ const clients: LocalChannel[] = []; // Operations for each local player
 // Game Simulation State (Client View)
 let simState: SimState | null = null;
 const serverUpdates: Array<{ tick: number; time: number; state: SimState }> = [];
+let lastPaintedKey: string | null = null;
 
 // UI Manager (Already Initialized Above)
 
@@ -315,10 +316,33 @@ const loop = new GameLoop(
         if (inputManager.isButtonJustPressed(0, 0)) editor.applyToolAtCursor(EditorTool.Raise); // A / Cross
         if (inputManager.isButtonJustPressed(0, 1)) editor.applyToolAtCursor(EditorTool.Lower); // B / Circle
         if (inputManager.isButtonJustPressed(0, 2)) editor.applyToolAtCursor(EditorTool.Flatten); // X / Square
-        if (inputManager.isButtonJustPressed(0, 3)) editor.applyToolAtCursor(EditorTool.Road); // Y / Triangle
+        if (inputManager.isButtonJustPressed(0, 3)) editor.applyToolAtCursor(EditorTool.Place); // Y / Triangle / Place Selected
+
+        // Palette Cycling (D-Pad Left/Right)
+        // Standard Mapping: 14=Left, 15=Right (or Axes 6/7 sometimes, but usually buttons)
+        if (inputManager.isButtonJustPressed(0, 14)) editor.cycleTileType(-1); // Left
+        if (inputManager.isButtonJustPressed(0, 15)) editor.cycleTileType(1); // Right
+        if (inputManager.isButtonJustPressed(0, 4)) editor.cycleTileType(-1); // L1
+        if (inputManager.isButtonJustPressed(0, 5)) editor.cycleTileType(1); // R1
+
+        // Keyboard Painting (Handbrake)
+        // Space or X (Handbrake) -> Place Tile
+        const isHandbrakeDown = inputManager.isKeyDown('Space') || inputManager.isKeyDown('KeyX');
+        if (isHandbrakeDown) {
+          const cursor = editor.getCursorGridPosition();
+          const key = `${cursor.x},${cursor.y}`;
+          if (key !== lastPaintedKey) {
+            editor.applyToolAtCursor(EditorTool.Place);
+            lastPaintedKey = key;
+          }
+        } else {
+          lastPaintedKey = null; // Reset when key released
+        }
 
         editor.update(dt);
-      } else if (simState) {
+      }
+
+      if (simState) {
         // removed inputManager.update() from here since it moved up
 
         // Collect inputs for each local player
