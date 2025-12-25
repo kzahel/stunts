@@ -37,11 +37,44 @@ export class Room {
     this.state = createInitialState(0);
 
     // Setup same default track as client
+    // Setup Figure 8 Track
     this.track = new Track();
-    for (let i = 10; i < 20; i++) {
-      this.track.setTile(i, 15, TileType.Road);
-      this.track.setTile(15, i, TileType.Road);
-    }
+    const z = 0;
+
+    // Center Intersection
+    this.track.setTile(15, 15, TileType.RoadIntersection, z, 0);
+
+    // Right Loop (Connnects to Center East/North)
+    // Outbound East (Horizontal -> Orient 0)
+    for (let x = 16; x <= 20; x++) this.track.setTile(x, 15, TileType.Road, z, 0);
+    // Turn Up (W->N) (NW Curve -> Orient 0)
+    this.track.setTile(21, 15, TileType.RoadTurn, z, 0);
+    // Up (Vertical -> Orient 1)
+    for (let y = 14; y >= 10; y--) this.track.setTile(21, y, TileType.Road, z, 1);
+    // Turn Left (S->W) (SW Curve -> Orient 3)
+    this.track.setTile(21, 9, TileType.RoadTurn, z, 3);
+    // Left (Horizontal -> Orient 0)
+    for (let x = 20; x >= 16; x--) this.track.setTile(x, 9, TileType.Road, z, 0);
+    // Turn Down (E->S) (SE Curve -> Orient 2)
+    this.track.setTile(15, 9, TileType.RoadTurn, z, 2);
+    // Down (Vertical -> Orient 1)
+    for (let y = 10; y <= 14; y++) this.track.setTile(15, y, TileType.Road, z, 1);
+
+    // Left Loop (Connects to Center South/West)
+    // Outbound South (Vertical -> Orient 1)
+    for (let y = 16; y <= 20; y++) this.track.setTile(15, y, TileType.Road, z, 1);
+    // Turn Right (N->W) (NW Curve -> Orient 0)
+    this.track.setTile(15, 21, TileType.RoadTurn, z, 0);
+    // West (Horizontal -> Orient 0)
+    for (let x = 14; x >= 10; x--) this.track.setTile(x, 21, TileType.Road, z, 0);
+    // Turn Up (E->N) (NE Curve -> Orient 1)
+    this.track.setTile(9, 21, TileType.RoadTurn, z, 1);
+    // Up (Vertical -> Orient 1)
+    for (let y = 20; y >= 16; y--) this.track.setTile(9, y, TileType.Road, z, 1);
+    // Turn Right (S->E) (SE Curve -> Orient 2)
+    this.track.setTile(9, 15, TileType.RoadTurn, z, 2);
+    // East (Horizontal -> Orient 0)
+    for (let x = 10; x <= 14; x++) this.track.setTile(x, 15, TileType.Road, z, 0);
   }
 
   public start() {

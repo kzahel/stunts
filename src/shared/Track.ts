@@ -3,9 +3,11 @@ export const HEIGHT_STEP = TILE_SIZE / 4;
 
 export const TileType = {
   Grass: 0,
-  Road: 1,
-  Start: 2,
-  Finish: 3,
+  Road: 1, // Straight
+  RoadTurn: 2,
+  RoadIntersection: 3,
+  Start: 4,
+  Finish: 5,
 } as const;
 
 export type TileType = (typeof TileType)[keyof typeof TileType];
@@ -13,6 +15,7 @@ export type TileType = (typeof TileType)[keyof typeof TileType];
 export interface TrackTile {
   type: TileType;
   height: number; // 0 is ground
+  orientation: number; // 0, 1, 2, 3 (90 degree increments clockwise)
 }
 
 export const TRACK_SIZE = 30;
@@ -26,7 +29,7 @@ export class Track {
     for (let x = 0; x < TRACK_SIZE; x++) {
       const col: TrackTile[] = [];
       for (let y = 0; y < TRACK_SIZE; y++) {
-        col.push({ type: TileType.Grass, height: 0 });
+        col.push({ type: TileType.Grass, height: 0, orientation: 0 });
       }
       this.tiles.push(col);
     }
@@ -34,9 +37,15 @@ export class Track {
     this.heightMap = new Float32Array((TRACK_SIZE + 1) * (TRACK_SIZE + 1)).fill(0);
   }
 
-  public setTile(x: number, y: number, type: TileType, height: number = 0) {
+  public setTile(
+    x: number,
+    y: number,
+    type: TileType,
+    height: number = 0,
+    orientation: number = 0,
+  ) {
     if (x >= 0 && x < TRACK_SIZE && y >= 0 && y < TRACK_SIZE) {
-      this.tiles[x][y] = { type, height };
+      this.tiles[x][y] = { type, height, orientation };
     }
   }
 

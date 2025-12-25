@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { WorldState } from '../../shared/Schema';
 import { Track, TRACK_SIZE, TileType, TILE_SIZE } from '../../shared/Track';
+import { createWorldTexture } from './TextureGenerator';
 
 export class GameRenderer {
   private scene: THREE.Scene;
@@ -129,15 +130,14 @@ export class GameRenderer {
       this.skidGroup.remove(this.skidGroup.children[0]);
     }
 
-    // Geometry Generation (Terrain Mesh)
-    // We separate logic for Grass vs Road to minimize draw calls
-    const grassVertices: number[] = [];
-    const roadVertices: number[] = [];
-    // const grassIndices: number[] = []; (Unused)
-    // const grassNormals: number[] = []; (Unused)
-    // Let's use simple vertex generation first, ThreeJS can compute flat normals
+    // Generate Texture
+    const texture = createWorldTexture();
+    texture.colorSpace = THREE.SRGBColorSpace;
 
-    // Helper to add Quad
+    const vertices: number[] = [];
+    const uvs: number[] = [];
+
+    // Helper to add Quad with UVs
     const addQuad = (
       x: number,
       y: number, // Grid Coordinates
@@ -145,11 +145,9 @@ export class GameRenderer {
       hNE: number,
       hSE: number,
       hSW: number,
-      vertices: number[],
+      orientation: number,
+      type: TileType,
     ) => {
-      // V1(NW) -> V2(SW) -> V3(SE)
-      // V1(NW) -> V3(SE) -> V4(NE)
-
       // Coordinates in World (Scale by TILE_SIZE)
       const x1 = x * TILE_SIZE;
       const z1 = y * TILE_SIZE; // Top Left (NW)
@@ -164,14 +162,181 @@ export class GameRenderer {
       const z4 = y * TILE_SIZE; // Top Right (NE)
 
       // Triangle 1: NW, SW, SE
+      // Triangle 2: NW, SE, NE
       vertices.push(x1, hNW, z1);
       vertices.push(x2, hSW, z2);
       vertices.push(x3, hSE, z3);
 
-      // Triangle 2: NW, SE, NE
       vertices.push(x1, hNW, z1);
       vertices.push(x3, hSE, z3);
       vertices.push(x4, hNE, z4);
+
+      // UV Mapping
+      // Atlas: 2x2
+      // Grass (0): 0, 0.5 -> 0.5, 1.0 (Top Left)
+      // Road (1): 0.5, 0.5 -> 1.0, 1.0 (Top Right)
+      // Turn (2): 0, 0 -> 0.5, 0.5 (Bot Left)
+      // Inter (3): 0.5, 0 -> 1.0, 0.5 (Bot Right)
+
+      let uMin = 0;
+      let vMin = 0;
+      let uMax = 0.5;
+      let vMax = 0.5;
+
+      // Handle Start/Finish as Road for now
+      let mappingType = type;
+      if (type === TileType.Start || type === TileType.Finish) {
+        mappingType = TileType.Road;
+      }
+
+      switch (mappingType) {
+        case TileType.Grass:
+          uMin = 0;
+          vMin = 0.5;
+          uMax = 0.5;
+          vMax = 1.0;
+          break;
+        case TileType.Road:
+          uMin = 0.5;
+          vMin = 0.5;
+          uMax = 1.0;
+          vMax = 1.0;
+          break;
+        case TileType.RoadTurn:
+          uMin = 0;
+          vMin = 0;
+          uMax = 0.5;
+          vMax = 0.5;
+          break;
+        case TileType.RoadIntersection:
+          uMin = 0.5;
+          vMin = 0;
+          uMax = 1.0;
+          vMax = 0.5;
+          break;
+        default: // Grass default
+          uMin = 0;
+          vMin = 0.5;
+          uMax = 0.5;
+          vMax = 1.0;
+          break;
+      }
+
+      // UV Corners:
+      // NW (TopLeft in World) -> V=Max (Top in Texture) ?
+      // Canvas Top is V=1 (if properly mapped) or V=0?
+      // ThreeJS UV (0,0) is Bottom Left.
+      // Canvas (0,0) is Top Left.
+      // So Canvas Y=0 is UV V=1. Canvas Y=1 is UV V=0.
+      // My Atlas definitions above assumed Canvas coords logic for "Top/Bot".
+      // Grass (Top Left in Canvas): Y=0..0.5 => V=1..0.5.
+      // So Grass V range is [0.5, 1.0].
+      // Grass NW (Top Left Tile) maps to Texture Top Left (uMin, vMax).
+      // Grass SW (Bot Left Tile) maps to Texture Bot Left (uMin, vMin).
+      // Grass SE (Bot Right Tile) maps to Texture Bot Right (uMax, vMin).
+      // Grass NE (Top Right Tile) maps to Texture Top Right (uMax, vMax).
+
+      const uvNW = { u: uMin, v: vMax };
+      const uvSW = { u: uMin, v: vMin };
+      const uvSE = { u: uMax, v: vMin };
+      const uvNE = { u: uMax, v: vMax };
+
+      const baseCorners = [uvNW, uvSW, uvSE, uvNE];
+
+      // Rotate Corners based on Orientation
+      // Orientation 0: No Rotation.
+      // Orientation 1: 90 deg CW.
+      //   World NW gets Texture SW?
+      //   Visual Rotation: We want the texture to rotate CW.
+      //   If we assign UVs:
+      //   NW maps to SW (uMin, vMin)
+      //   NE maps to NW (uMin, vMax)
+      //   SE maps to NE (uMax, vMax)
+      //   SW maps to SE (uMax, vMin)
+      //   Let's cycle the array.
+      //   Indices: 0=NW, 1=SW, 2=SE, 3=NE.
+      //   Rot 1 shifts indices?
+      //   Let's do shift.
+
+      // Rot 0: [NW, SW, SE, NE]
+      // Rot 1: [SW, SE, NE, NW] (Texture's SW is at World NW)
+
+      const rotatedCorners = [...baseCorners];
+      for (let i = 0; i < orientation; i++) {
+        const last = rotatedCorners.pop()!; // NE
+        rotatedCorners.unshift(last); // NE becomes first (at NW pos)
+
+        // Wait.
+        // If NW gets NE's UV.
+        // NE is Top Right.
+        // So World Top Left shows Texture Top Right.
+        // That is a 90 deg CCW rotation of texture?
+        // Or 90 deg CW?
+        // Imagine Arrow Pointing Up (Standard).
+        // Head at Top. base at Bottom.
+        // NW=HeadL, NE=HeadR, SW=BaseL, SE=BaseR.
+        // If NW gets BaseL (SW).
+        // World NW shows BaseL.
+        // World NE shows HeadL (NW).
+        // World SE shows HeadR (NE).
+        // World SW shows BaseR (SE).
+        // So Base is now at Top. Head is at Right.
+        // Arrow points Right.
+        // That is 90 deg Closkwise.
+
+        // So:
+        // NW gets SW?
+        // My array order: [NW, SW, SE, NE].
+        // index 0 gets index 1?
+        // Let's verify shift.
+        // rotatedCorners = [SW, SE, NE, NW].
+        // 0 (World NW) gets SW.
+        // Correct.
+
+        // But my pop/unshift does:
+        // pop takes NE. unshift puts NE at 0.
+        // So 0 gets NE.
+        // This is 90 CCW.
+
+        // To get 90 CW:
+        // 0 gets SW (1).
+        // 1 gets SE (2).
+        // 2 gets NE (3).
+        // 3 gets NW (0).
+        // So shift left.
+
+        // Implementation check:
+        // rotatedCorners.shift() -> NW.
+        // push(NW).
+        // Result: [SW, SE, NE, NW].
+        // This is correct for 90 CW.
+      }
+
+      // But my loop above used pop/unshift which is shift right.
+      // So I should use shift/push.
+
+      for (let i = 0; i < orientation; i++) {
+        const first = rotatedCorners.shift()!;
+        rotatedCorners.push(first);
+      }
+
+      // vertices pushed: NW, SW, SE ... NW, SE, NE
+      // indices in 'rotatedCorners': 0(NW), 1(SW), 2(SE), 3(NE)
+
+      const cNW = rotatedCorners[0];
+      const cSW = rotatedCorners[1];
+      const cSE = rotatedCorners[2];
+      const cNE = rotatedCorners[3];
+
+      // Tri 1: NW, SW, SE
+      uvs.push(cNW.u, cNW.v);
+      uvs.push(cSW.u, cSW.v);
+      uvs.push(cSE.u, cSE.v);
+
+      // Tri 2: NW, SE, NE
+      uvs.push(cNW.u, cNW.v);
+      uvs.push(cSE.u, cSE.v);
+      uvs.push(cNE.u, cNE.v);
     };
 
     for (let x = 0; x < TRACK_SIZE; x++) {
@@ -180,37 +345,31 @@ export class GameRenderer {
         if (!tile) continue;
 
         const corners = track.getTileCornerHeights(x, y);
-        const target = tile.type === TileType.Grass ? grassVertices : roadVertices;
-
-        addQuad(x, y, corners.nw, corners.ne, corners.se, corners.sw, target);
+        addQuad(x, y, corners.nw, corners.ne, corners.se, corners.sw, tile.orientation, tile.type);
       }
     }
 
-    // Create Meshes
-    const createMesh = (vertices: number[], color: number) => {
-      if (vertices.length === 0) return;
+    // Create Mesh
+    const createMesh = (verts: number[], uvCoords: number[]) => {
+      if (verts.length === 0) return;
       const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-      geo.computeVertexNormals(); // Smooth shading if shared vertices?
-      // Current implementation does NOT share vertices (triangle soup), so this computes Flat shading per face effectively if vertices are duplicated.
-      // Wait, 'computeVertexNormals' on triangle soup (non-indexed) will create normals per vertex.
-      // If vertices are distinct (position not shared by index), they will be flat shaded?
-      // No, computeVertexNormals checks coordinates. If coordinates match, it might average?
-      // Actually for unconnected soup, it often computes face normals.
-      // Let's stick to this.
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvCoords, 2));
+      geo.computeVertexNormals();
 
       const mat = new THREE.MeshStandardMaterial({
-        color,
+        map: texture,
+        color: 0xffffff,
         side: THREE.FrontSide,
-        flatShading: true, // Retro look
+        flatShading: false, // Smooth shading looks better on curved road? Or keep flat.
+        // Standard Material works with lights.
       });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.receiveShadow = true;
       this.trackGroup.add(mesh);
     };
 
-    createMesh(grassVertices, 0x006400); // Dark Green
-    createMesh(roadVertices, 0x808080); // Grey
+    createMesh(vertices, uvs);
   }
 
   private createCarMesh(color: number): THREE.Group {
