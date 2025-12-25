@@ -112,46 +112,77 @@ export class Editor {
     console.log('Editor Tool:', tool);
   }
 
-  private updateUI() {
-    let name = 'None';
+  public updateUI() {
+    if (!this.active) {
+      this.ui.updateEditorStatus(false, '');
+      return;
+    }
+
+    let name = '';
+    let color: string | null = null;
+    let tileName = 'ROAD';
+
+    // 1. Determine base tool name
     switch (this.currentTool) {
+      case EditorTool.None:
+        name = 'NONE (Use Buttons/Keys)';
+        break;
       case EditorTool.Raise:
-        name = '⬆️ RAISE (1)';
+        name = 'RAISE (0)';
         break;
       case EditorTool.Lower:
-        name = '⬇️ LOWER (2)';
+        name = 'LOWER (1)';
         break;
       case EditorTool.Flatten:
-        name = '➖ FLATTEN (3)';
+        name = 'FLATTEN (2)';
         break;
-      case EditorTool.Road:
-        name = `ROAD (4)`;
-        break;
-      case EditorTool.Place: {
-        // Find name of current tile
-        let tileName = 'ROAD';
+      case EditorTool.Place:
+        // For Place tool, show current selection prominently
         if (this.selectedTileType === TileType.Grass) tileName = 'GRASS';
         if (this.selectedTileType === TileType.Dirt) tileName = 'DIRT';
         if (this.selectedTileType === TileType.Sand) tileName = 'SAND';
         if (this.selectedTileType === TileType.Water) tileName = 'WATER';
         if (this.selectedTileType === TileType.Snow) tileName = 'SNOW';
+
         name = `PLACE [${tileName}] (3)`;
+        color = this.getTileColor(this.selectedTileType);
         break;
-      }
     }
 
-    // Append Palette info always if active?
-    if (this.active) {
-      let tileName = 'ROAD';
+    // 2. Append Palette info if not Place tool (so user knows what's selected mainly)
+    if (this.currentTool !== EditorTool.Place) {
       if (this.selectedTileType === TileType.Grass) tileName = 'GRASS';
-      if (this.selectedTileType === TileType.Dirt) tileName = 'DIRT';
-      if (this.selectedTileType === TileType.Sand) tileName = 'SAND';
-      if (this.selectedTileType === TileType.Water) tileName = 'WATER';
-      if (this.selectedTileType === TileType.Snow) tileName = 'SNOW';
+      else if (this.selectedTileType === TileType.Dirt) tileName = 'DIRT';
+      else if (this.selectedTileType === TileType.Sand) tileName = 'SAND';
+      else if (this.selectedTileType === TileType.Water) tileName = 'WATER';
+      else if (this.selectedTileType === TileType.Snow) tileName = 'SNOW';
+      // Road is default
+
       name += ` | Palette: < ${tileName} >`;
+      // Also show color for palette
+      color = this.getTileColor(this.selectedTileType);
     }
 
-    this.ui.updateEditorStatus(this.active, name);
+    this.ui.updateEditorStatus(true, name, color);
+  }
+
+  private getTileColor(type: TileType): string {
+    switch (type) {
+      case TileType.Road:
+        return '#555555';
+      case TileType.Grass:
+        return '#4caf50';
+      case TileType.Dirt:
+        return '#5d4037';
+      case TileType.Sand:
+        return '#fbc02d';
+      case TileType.Water:
+        return '#0277bd';
+      case TileType.Snow:
+        return '#eeeeee';
+      default:
+        return '#ffffff';
+    }
   }
 
   public cycleTileType(direction: number) {

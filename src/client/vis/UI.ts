@@ -164,7 +164,7 @@ export class UIManager {
   // Editor HUD
   private editorHud: HTMLElement | null = null;
 
-  public updateEditorStatus(active: boolean, toolName: string) {
+  public updateEditorStatus(active: boolean, toolName: string, paletteColor: string | null = null) {
     if (!active) {
       if (this.editorHud) {
         this.editorHud.style.display = 'none';
@@ -186,10 +186,29 @@ export class UIManager {
       this.editorHud.style.fontSize = '16px';
       this.editorHud.style.pointerEvents = 'none';
       this.editorHud.style.zIndex = '1000';
+      this.editorHud.style.display = 'flex';
+      this.editorHud.style.alignItems = 'center';
+      this.editorHud.style.gap = '10px';
       this.container.appendChild(this.editorHud);
     }
 
-    this.editorHud.style.display = 'block';
-    this.editorHud.textContent = `EDITOR MODE | TOOL: ${toolName}`;
+    this.editorHud.style.display = 'flex'; // Flex for layout
+
+    // Clear content
+    this.editorHud.innerHTML = '';
+
+    const text = document.createElement('span');
+    text.textContent = `EDITOR MODE | TOOL: ${toolName}`;
+    this.editorHud.appendChild(text);
+
+    if (paletteColor) {
+      const swatch = document.createElement('div');
+      swatch.style.width = '20px';
+      swatch.style.height = '20px';
+      swatch.style.backgroundColor = paletteColor;
+      swatch.style.border = '2px solid white';
+      swatch.style.borderRadius = '4px';
+      this.editorHud.appendChild(swatch);
+    }
   }
 }
