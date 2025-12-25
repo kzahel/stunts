@@ -78,8 +78,8 @@ export function interpolateState(a: WorldState, b: WorldState, t: number): World
 
 export const createInitialState = (playerCount: number = 1): WorldState => ({
   players: Array.from({ length: playerCount }, () => ({
-    x: 0,
-    y: 0,
+    x: 10,
+    y: 10,
     z: 0.5, // Start grounded (Rest length ~0.6, so 0.5 is compressed/sprung)
     velocity: { x: 0, y: 0 },
     vz: 0,

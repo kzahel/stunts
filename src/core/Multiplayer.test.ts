@@ -60,8 +60,8 @@ describe('Multiplayer Input & Physics', () => {
     const nextState = physics.step(initialState, inputs, 0.016);
 
     // P1 should not move
-    expect(nextState.players[0].x).toBe(0);
-    expect(nextState.players[0].y).toBe(0);
+    expect(nextState.players[0].x).toBe(10);
+    expect(nextState.players[0].y).toBe(10);
 
     // P2 should move (accel -> velocity -> position)
     // 0.016s update:
