@@ -389,8 +389,8 @@ export class GameRenderer {
 
       // Let's use Quaternions to be safe.
       const qYaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -player.angle + Math.PI / 2);
-      const qPitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), player.pitch); // Adjust sign if needed
-      const qRoll = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -player.roll); // Adjust sign if needed
+      const qPitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -player.pitch); // Adjust sign: Physics +Pitch is Up, Renderer +Pitch is Down
+      const qRoll = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), player.roll); // Adjust sign: Physics -Roll is LeftUp, Renderer -Roll is LeftUp
 
       // Order: Yaw -> Pitch -> Roll?
       // group.quaternion.copy(qYaw.multiply(qPitch).multiply(qRoll)); 
