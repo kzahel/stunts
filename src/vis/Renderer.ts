@@ -9,7 +9,7 @@ export class GameRenderer {
 
     private trackGroup: THREE.Group;
 
-    private carMeshes: THREE.Mesh[] = [];
+    private carMeshes: THREE.Group[] = [];
 
     // ... (constructor remains mostly same, but remove single carMesh creation)
 
@@ -99,15 +99,82 @@ export class GameRenderer {
         }
     }
 
+    private createCarMesh(color: number): THREE.Group {
+        const group = new THREE.Group();
+
+        // Materials
+        const bodyMat = new THREE.MeshStandardMaterial({ color });
+        const blackMat = new THREE.MeshStandardMaterial({ color: 0x333333 }); // Tires/Spoiler parts
+
+        // 1. Narrow Body
+        // Original was 2 wide, 1 high, 4 long. Let's make it narrower and lower.
+        const bodyGeo = new THREE.BoxGeometry(1.0, 0.6, 4.2);
+        const body = new THREE.Mesh(bodyGeo, bodyMat);
+        body.position.y = 0.5; // Lift up slightly
+        body.castShadow = true;
+        group.add(body);
+
+        // 2. Cockpit / Engine bump (behind driver)
+        const cockpitGeo = new THREE.BoxGeometry(0.9, 0.4, 1.5);
+        const cockpit = new THREE.Mesh(cockpitGeo, bodyMat);
+        cockpit.position.set(0, 0.9, -0.5); // Slightly back and up
+        group.add(cockpit);
+
+        // 3. Wheels (Open wheel style)
+        // Cylinder oriented along Z by default, we need to rotate it to be an axle along X
+        const wheelGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.4, 16);
+        wheelGeo.rotateZ(Math.PI / 2);
+
+        const wheelOffsets = [
+            { x: -0.9, z: 1.2 },  // Front Left
+            { x: 0.9, z: 1.2 },   // Front Right
+            { x: -0.9, z: -1.4 }, // Rear Left
+            { x: 0.9, z: -1.4 },  // Rear Right
+        ];
+
+        wheelOffsets.forEach(offset => {
+            const wheel = new THREE.Mesh(wheelGeo, blackMat);
+            wheel.position.set(offset.x, 0.4, offset.z);
+            wheel.castShadow = true;
+            group.add(wheel);
+        });
+
+        // 4. Rear Spoiler
+        const spoilerZ = -1.9;
+
+        // Struts
+        const strutGeo = new THREE.BoxGeometry(0.1, 0.5, 0.1);
+        const strutL = new THREE.Mesh(strutGeo, blackMat);
+        strutL.position.set(-0.3, 1.0, spoilerZ);
+        group.add(strutL);
+
+        const strutR = new THREE.Mesh(strutGeo, blackMat);
+        strutR.position.set(0.3, 1.0, spoilerZ);
+        group.add(strutR);
+
+        // Wing
+        const wingGeo = new THREE.BoxGeometry(2.2, 0.1, 0.6);
+        const wing = new THREE.Mesh(wingGeo, bodyMat); // Wing matches car color usually
+        wing.position.set(0, 1.3, spoilerZ);
+        group.add(wing);
+
+        // 5. Front Spoiler (Wing)
+        const frontWingGeo = new THREE.BoxGeometry(2.0, 0.1, 0.5);
+        const frontWing = new THREE.Mesh(frontWingGeo, bodyMat);
+        frontWing.position.set(0, 0.2, 2.1);
+        group.add(frontWing);
+
+        return group;
+    }
+
     private updateCarMeshes(count: number) {
         // Add needed
         while (this.carMeshes.length < count) {
-            const carGeom = new THREE.BoxGeometry(2, 1, 4);
-            // Give different colors?
+            // Give different colors
             const colors = [0xff0000, 0x0000ff, 0x00ff00, 0xffff00];
             const color = colors[this.carMeshes.length % colors.length];
-            const carMat = new THREE.MeshStandardMaterial({ color });
-            const mesh = new THREE.Mesh(carGeom, carMat);
+
+            const mesh = this.createCarMesh(color);
             this.scene.add(mesh);
             this.carMeshes.push(mesh);
         }
@@ -118,12 +185,28 @@ export class GameRenderer {
     public render(state: WorldState, _alpha: number) {
         this.updateCarMeshes(state.players.length);
 
-        // Update all car positions first
+        // Update all car positions
         state.players.forEach((player, i) => {
-            const mesh = this.carMeshes[i];
-            mesh.position.set(player.position.x, 1, player.position.y);
-            mesh.rotation.y = -player.angle;
-            mesh.visible = true;
+            const group = this.carMeshes[i];
+            group.position.set(player.position.x, 0, player.position.y); // y=0 because parts are offset internally
+            group.rotation.y = -player.angle; // THREE.js Y-rotation is counter-clockwise? Physics angle might be CW or CCW.
+            // Note: Physics.ts: forwardX = Math.cos(angle). Standard math angle starts at X+ (Right) and goes CCW.
+            // THREE.js: looking down -Y, X is right, Z is down?
+            // Let's assume standard rotation for now. If car moves sideways, fix rotation.
+            // Actually, in Physics.ts, velocity.x = cos(angle). This implies 0 angle = +X direction.
+            // In THREE.js, objects usually face -Z or +Z. Our car body has length 4 along Z. 
+            // If we build it along Z, we might need an offset rotation 
+            // Our Car Body box is (1, 0.6, 4.2). Z is the long axis.
+            // If angle 0 is +X in physics, but our car model is along Z, we probably need `rotation.y = -player.angle + Math.PI/2` or something.
+            // Let's stick to simple mapping and verify visually.
+            // If car travels along X, and car length is Z, it will look like it's drifting.
+            // I'll add a boolean flag or just hardcode a +PI/2 rotation offset if typical "forward" is Z for this mesh.
+            // Let's assume typical car model faces +Z or -Z. 
+            // Physics: angle 0 = +X. 
+            // We want the car (Length along Z) to point to +X. So rotate +90deg (PI/2).
+
+            group.rotation.y = -player.angle + Math.PI / 2;
+            group.visible = true;
         });
 
         // Hide unused cars
