@@ -1,5 +1,6 @@
 import { PhysicsEngine } from '../core/Physics';
 import { GameLoop } from '../core/GameLoop';
+import { TrafficManager } from '../core/TrafficManager';
 import { Track, TileType } from '../shared/Track';
 import { createInitialState } from '../shared/Schema';
 import type { WorldState, Input } from '../shared/Schema';
@@ -23,6 +24,7 @@ interface Client {
 
 export class Room {
   private physics: PhysicsEngine;
+  private trafficManager: TrafficManager;
   private state: WorldState;
   private track: Track;
   private clients: Map<number, Client> = new Map();
@@ -34,6 +36,7 @@ export class Room {
   constructor(tickRate: number = 60) {
     this.tickRate = tickRate;
     this.physics = new PhysicsEngine();
+    this.trafficManager = new TrafficManager();
     this.state = createInitialState(0);
 
     // Setup same default track as client
@@ -75,6 +78,9 @@ export class Room {
     this.track.setTile(9, 15, TileType.RoadTurn, z, 2);
     // East (Horizontal -> Orient 0)
     for (let x = 10; x <= 14; x++) this.track.setTile(x, 15, TileType.Road, z, 0);
+
+    // Initial Traffic
+    this.trafficManager.populate(this.state, this.track);
   }
 
   public start() {
@@ -204,6 +210,7 @@ export class Room {
     });
 
     this.state = this.physics.step(this.state, inputs, dt, this.track);
+    this.trafficManager.update(this.state, this.track, dt);
 
     // Broadcast State
     const updateMsg: StateMessage = {

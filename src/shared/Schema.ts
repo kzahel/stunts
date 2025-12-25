@@ -29,8 +29,19 @@ export interface PhysicalBody {
   skidding: boolean; // Visual skid flag
 }
 
+export interface TrafficCar {
+  id: number;
+  x: number;
+  y: number;
+  angle: number;
+  speed: number;
+  color: number;
+  type: number; // 0: Sedan, 1: Truck, etc.
+}
+
 export interface WorldState {
   players: PhysicalBody[]; // Index 0 is player 1, etc.
+  traffic: TrafficCar[];
 }
 
 export function lerp(a: number, b: number, t: number): number {
@@ -65,15 +76,40 @@ export function lerpBody(a: PhysicalBody, b: PhysicalBody, t: number): PhysicalB
   };
 }
 
+export function lerpTraffic(a: TrafficCar, b: TrafficCar, t: number): TrafficCar {
+  return {
+    id: b.id,
+    x: lerp(a.x, b.x, t),
+    y: lerp(a.y, b.y, t),
+    angle: lerpAngle(a.angle, b.angle, t),
+    speed: lerp(a.speed, b.speed, t),
+    color: b.color,
+    type: b.type,
+  };
+}
+
 export function interpolateState(a: WorldState, b: WorldState, t: number): WorldState {
   // Assuming player lists match in size and order for now
-  return {
-    players: a.players.map((pA, i) => {
-      const pB = b.players[i];
-      if (!pB) return pA;
-      return lerpBody(pA, pB, t);
-    }),
-  };
+  const players = a.players.map((pA, i) => {
+    const pB = b.players[i];
+    if (!pB) return pA;
+    return lerpBody(pA, pB, t);
+  });
+
+  // Traffic interpolation
+  // Map by ID
+  const trafficBMap = new Map(b.traffic.map((t) => [t.id, t]));
+  const traffic = a.traffic
+    .filter((tA) => trafficBMap.has(tA.id))
+    .map((tA) => {
+      const tB = trafficBMap.get(tA.id)!;
+      return lerpTraffic(tA, tB, t);
+    });
+
+  // Add new traffic from B that wasn't in A (snap to B) - optional, or just ignore until next frame?
+  // For smoothness, we only interpolate existing.
+
+  return { players, traffic };
 }
 
 export const createInitialState = (playerCount: number = 1): WorldState => ({
@@ -92,4 +128,5 @@ export const createInitialState = (playerCount: number = 1): WorldState => ({
     steer: 0,
     skidding: false,
   })),
+  traffic: [],
 });

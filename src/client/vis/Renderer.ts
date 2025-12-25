@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { WorldState } from '../../shared/Schema';
+import type { WorldState, TrafficCar } from '../../shared/Schema';
 import { Track, TRACK_SIZE, TileType, TILE_SIZE } from '../../shared/Track';
 import { createWorldTexture, createWaterTexture } from './TextureGenerator';
 
@@ -22,6 +22,9 @@ export class GameRenderer {
   private worldTexture: THREE.CanvasTexture | null = null;
   private dedicatedWaterTexture: THREE.CanvasTexture | null = null;
   private waterGroup: THREE.Group | null = null;
+
+  private trafficGroup: THREE.Group;
+  private trafficMeshes = new Map<number, THREE.Group>();
 
   // ... (constructor remains mostly same, but remove single carMesh creation)
 
@@ -85,11 +88,14 @@ export class GameRenderer {
     this.scene.add(dirLight);
 
     // Track Group
+    this.skidGroup = new THREE.Group();
+    this.scene.add(this.skidGroup);
+
     this.trackGroup = new THREE.Group();
     this.scene.add(this.trackGroup);
 
-    this.skidGroup = new THREE.Group();
-    this.scene.add(this.skidGroup);
+    this.trafficGroup = new THREE.Group();
+    this.scene.add(this.trafficGroup);
 
     // Axes Helper
     const axesHelper = new THREE.AxesHelper(5);
@@ -520,6 +526,101 @@ export class GameRenderer {
     // For now we just keep them added.
   }
 
+  private createTrafficCarMesh(color: number, type: number): THREE.Group {
+    const group = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({ color });
+    const black = new THREE.MeshStandardMaterial({ color: 0x333333 });
+
+    // Simple Box Car
+    // Types could vary geometry slightly?
+    // Type 0: Sedan (Low)
+    // Type 1: Truck (High)
+    // Type 2: Van (Boxy)
+
+    let bodyGeo;
+    let cabinGeo;
+
+    if (type === 1) {
+      // Truck
+      bodyGeo = new THREE.BoxGeometry(1.2, 0.8, 4.0);
+      cabinGeo = new THREE.BoxGeometry(1.2, 0.6, 1.5);
+    } else {
+      // Sedan
+      bodyGeo = new THREE.BoxGeometry(1.2, 0.6, 3.5);
+      cabinGeo = new THREE.BoxGeometry(1.0, 0.5, 1.2);
+    }
+
+    const body = new THREE.Mesh(bodyGeo, mat);
+    body.position.y = 0.5;
+    body.castShadow = true;
+    group.add(body);
+
+    const cabin = new THREE.Mesh(cabinGeo, mat);
+    cabin.position.set(0, 0.9, -0.2);
+    cabin.castShadow = true;
+    group.add(cabin);
+
+    // Wheels
+    const wGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.3, 12);
+    wGeo.rotateZ(Math.PI / 2);
+    const wPos = [
+      { x: -0.7, z: 1.0 },
+      { x: 0.7, z: 1.0 },
+      { x: -0.7, z: -1.0 },
+      { x: 0.7, z: -1.0 },
+    ];
+
+    wPos.forEach((p) => {
+      const w = new THREE.Mesh(wGeo, black);
+      w.position.set(p.x, 0.35, p.z);
+      group.add(w);
+    });
+
+    return group;
+  }
+
+  private updateTrafficMeshes(traffic: TrafficCar[]) {
+    const activeIds = new Set<number>();
+
+    traffic.forEach((car) => {
+      activeIds.add(car.id);
+      let mesh = this.trafficMeshes.get(car.id);
+      if (!mesh) {
+        mesh = this.createTrafficCarMesh(car.color, car.type);
+        this.trafficGroup.add(mesh);
+        this.trafficMeshes.set(car.id, mesh);
+      }
+
+      // Update Position
+      // Similar to player car
+      mesh.position.set(car.x, 0, car.y); // Ground height 0 approx? Or use getHeight?
+      // Traffic on road is usually at known height if flat.
+      // But map is 3D.
+      const h = this.getHeightAt(car.x, car.y);
+      mesh.position.y = h;
+
+      // Rotation
+      // Yaw: -angle + PI/2 ? Same as player
+      mesh.rotation.y = -car.angle + Math.PI / 2;
+
+      // Pitch/Roll? Simple traffic usually doesn't need complex physics tilt
+      // unless we calculate partials.
+      // Let's just align to Normal?
+      // Align Up Vector to Normal
+      // mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), normal);
+      // And rotate Y? Mixing lookAt and Up is tricky.
+      // Simpler: Just allow it to clip slightly or set y offset.
+    });
+
+    // Cleanup
+    for (const [id, mesh] of this.trafficMeshes) {
+      if (!activeIds.has(id)) {
+        this.trafficGroup.remove(mesh);
+        this.trafficMeshes.delete(id);
+      }
+    }
+  }
+
   // Helper to interpolate height at visual position
   private getHeightAt(worldX: number, worldY: number): number {
     if (!this.track) return 0;
@@ -567,6 +668,7 @@ export class GameRenderer {
     }
 
     this.updateCarMeshes(state.players.length);
+    this.updateTrafficMeshes(state.traffic);
 
     // Update all car positions
     state.players.forEach((player, i) => {

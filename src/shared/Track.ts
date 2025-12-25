@@ -312,6 +312,65 @@ export class Track {
       this.heightMap = new Float32Array(data.heightMap);
     }
   }
+
+  // Traffic Helpers
+  public getTrafficDirections(x: number, y: number): number[] {
+    const tile = this.getTile(x, y);
+    if (!tile) return [];
+
+    // Directions: 0=N, 1=E, 2=S, 3=W (matches orientation roughly? wait, verify orientation)
+    // Orientation in Track.ts:
+    // Road: Vertical=1 (N/S), Horizontal=0 (E/W)
+    // Turn:
+    // 3: N+E => NE Corner (connects N and E). Wait, earlier code said:
+    // case 3 (N+E) => Type=RoadTurn, Orientation=1.
+    // Let's standardise directions:
+    // 0: N (decreases Y)
+    // 1: E (increases X)
+    // 2: S (increases Y)
+    // 3: W (decreases X)
+
+    if (tile.type === TileType.Road) {
+      if (tile.orientation === 1) return [0, 2]; // N, S
+      return [1, 3]; // E, W
+    }
+    if (tile.type === TileType.RoadIntersection) {
+      // Assume 4-way for now, could check neighbors to be sure but random is OK for 4-way
+      // Or check neighbors to see if they are roads.
+      const dirs = [];
+      if (this.isRoad(x, y - 1)) dirs.push(0);
+      if (this.isRoad(x + 1, y)) dirs.push(1);
+      if (this.isRoad(x, y + 1)) dirs.push(2);
+      if (this.isRoad(x - 1, y)) dirs.push(3);
+      return dirs;
+    }
+    if (tile.type === TileType.RoadTurn) {
+      // Map orientation to connections
+      // From autoTile:
+      // case 3 (N+E) => Orientation 1 (NE)
+      // case 6 (E+S) => Orientation 2 (SE)
+      // case 12 (S+W) => Orientation 3 (SW)
+      // case 9 (N+W) => Orientation 0 (NW)
+
+      switch (tile.orientation) {
+        case 0:
+          return [0, 3]; // NW
+        case 1:
+          return [0, 1]; // NE
+        case 2:
+          return [1, 2]; // SE
+        case 3:
+          return [2, 3]; // SW
+      }
+    }
+    if (tile.type === TileType.Start || tile.type === TileType.Finish) {
+      // Treat as road vertical usually? Or check neighbors
+      if (tile.orientation === 1) return [0, 2];
+      return [1, 3];
+    }
+
+    return [];
+  }
 }
 
 export interface SerializedTrack {
