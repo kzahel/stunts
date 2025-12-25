@@ -7,10 +7,17 @@ export class InputManager {
   private gamepads: (Gamepad | null)[] = [];
   private playerConfigs: PlayerControlConfig[] = [];
 
+  private accumulatedJustPressedKeys = new Set<string>();
+  private justPressedKeys = new Set<string>();
+
   constructor() {
     window.addEventListener('keydown', (e) => {
       this.keysPressed.add(e.code); // Use code for physical layout (WASD)
       this.keysPressed.add(e.key); // Use key for logical layout (Arrows)
+      if (!e.repeat) {
+        this.accumulatedJustPressedKeys.add(e.code);
+        this.accumulatedJustPressedKeys.add(e.key);
+      }
     });
 
     window.addEventListener('keyup', (e) => {
@@ -46,6 +53,10 @@ export class InputManager {
       }
     }
 
+    // 2. Cycle Key Presses
+    this.justPressedKeys = new Set(this.accumulatedJustPressedKeys);
+    this.accumulatedJustPressedKeys.clear();
+
     // 2. Poll new state
     this.gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
   }
@@ -62,6 +73,10 @@ export class InputManager {
 
   public isKeyDown(code: string): boolean {
     return this.keysPressed.has(code);
+  }
+
+  public isKeyJustPressed(code: string): boolean {
+    return this.justPressedKeys.has(code);
   }
 
   public getInput(playerIndex: number): Input {

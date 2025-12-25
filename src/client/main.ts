@@ -325,6 +325,10 @@ const loop = new GameLoop(
         if (inputManager.isButtonJustPressed(0, 4)) editor.cycleTileType(-1); // L1
         if (inputManager.isButtonJustPressed(0, 5)) editor.cycleTileType(1); // R1
 
+        // Keyboard Palette Cycling
+        if (inputManager.isKeyJustPressed('Digit4')) editor.cycleTileType(-1);
+        if (inputManager.isKeyJustPressed('Digit5')) editor.cycleTileType(1);
+
         // Keyboard Painting (Handbrake)
         // Space or X (Handbrake) -> Place Tile
         const isHandbrakeDown = inputManager.isKeyDown('Space') || inputManager.isKeyDown('KeyX');
