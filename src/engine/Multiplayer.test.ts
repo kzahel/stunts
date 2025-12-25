@@ -2,6 +2,7 @@ import { expect, test, describe } from 'vitest';
 import { InputManager } from './Input';
 import { PhysicsEngine } from './Physics';
 import { createInitialState } from './Schema';
+import { ControlType } from './Settings';
 
 // Note: jsdom environment is configured in vite.config.ts, so window/document are available globally.
 
@@ -9,6 +10,10 @@ import { createInitialState } from './Schema';
 describe('Multiplayer Input & Physics', () => {
     test('InputManager separates P1 (Arrows) and P2 (WASD)', () => {
         const manager = new InputManager();
+        manager.setConfig([
+            { playerId: 0, type: ControlType.ARROWS },
+            { playerId: 1, type: ControlType.WASD }
+        ]);
 
         // Emulate Key Press for P1
         const eventUp = new KeyboardEvent('keydown', { key: 'ArrowUp', code: 'ArrowUp' });
