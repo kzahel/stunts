@@ -11,6 +11,9 @@ export class GameRenderer {
 
   private carMeshes: THREE.Group[] = [];
 
+  private perspectiveCamera: THREE.PerspectiveCamera;
+  private playerCameraModes: number[] = []; // 0: First, 1: Third, 2: Iso Fixed, 3: Iso Relative
+
   // ... (constructor remains mostly same, but remove single carMesh creation)
 
   constructor(container: HTMLElement) {
@@ -31,6 +34,8 @@ export class GameRenderer {
       1,
       1000,
     );
+
+    this.perspectiveCamera = new THREE.PerspectiveCamera(100, aspect, 0.1, 1000);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setSize(container.clientWidth, container.clientHeight);
@@ -65,7 +70,18 @@ export class GameRenderer {
     this.camera.bottom = -frustumSize / 2;
 
     this.camera.updateProjectionMatrix();
+
+    this.perspectiveCamera.aspect = aspect;
+    this.perspectiveCamera.updateProjectionMatrix();
+
     this.renderer.setSize(container.clientWidth, container.clientHeight);
+  }
+
+  public cycleCameraMode(playerIndex: number) {
+    if (this.playerCameraModes[playerIndex] === undefined) {
+      this.playerCameraModes[playerIndex] = 0;
+    }
+    this.playerCameraModes[playerIndex] = (this.playerCameraModes[playerIndex] + 1) % 4; // 4 modes
   }
 
   public initTrackOrUpdate(track: Track) {
@@ -188,23 +204,13 @@ export class GameRenderer {
     // Update all car positions
     state.players.forEach((player, i) => {
       const group = this.carMeshes[i];
-      group.position.set(player.position.x, 0, player.position.y); // y=0 because parts are offset internally
-      group.rotation.y = -player.angle; // THREE.js Y-rotation is counter-clockwise? Physics angle might be CW or CCW.
-      // Note: Physics.ts: forwardX = Math.cos(angle). Standard math angle starts at X+ (Right) and goes CCW.
-      // THREE.js: looking down -Y, X is right, Z is down?
-      // Let's assume standard rotation for now. If car moves sideways, fix rotation.
-      // Actually, in Physics.ts, velocity.x = cos(angle). This implies 0 angle = +X direction.
-      // In THREE.js, objects usually face -Z or +Z. Our car body has length 4 along Z.
-      // If we build it along Z, we might need an offset rotation
-      // Our Car Body box is (1, 0.6, 4.2). Z is the long axis.
-      // If angle 0 is +X in physics, but our car model is along Z, we probably need `rotation.y = -player.angle + Math.PI/2` or something.
-      // Let's stick to simple mapping and verify visually.
-      // If car travels along X, and car length is Z, it will look like it's drifting.
-      // I'll add a boolean flag or just hardcode a +PI/2 rotation offset if typical "forward" is Z for this mesh.
-      // Let's assume typical car model faces +Z or -Z.
-      // Physics: angle 0 = +X.
-      // We want the car (Length along Z) to point to +X. So rotate +90deg (PI/2).
-
+      group.position.set(player.x, 0, player.y); // y=0 because parts are offset internally
+      // Physics angle is CCW from +X. 
+      // ThreeJS object space: Car points along -Z? or +Z? 
+      // Box(1, 0.6, 4.2). Long axis is Z.
+      // We need to rotate it so its forward aligns with velocity.
+      // Need to negate physics angle because Physics(+Angle) -> +Z, while Three(+Rotation) -> -Z.
+      // Offset of PI/2 aligns model (+Z) to Physics (+X).
       group.rotation.y = -player.angle + Math.PI / 2;
       group.visible = true;
     });
@@ -243,27 +249,97 @@ export class GameRenderer {
       if (i >= playerCount) return;
       const player = state.players[i];
 
+      // Initialize mode if needed
+      if (this.playerCameraModes[i] === undefined) {
+        // Default to Mode 2 (Iso Fixed) to match original behavior
+        this.playerCameraModes[i] = 2;
+      }
+      const mode = this.playerCameraModes[i];
+
+      const vpAspect = vp.w / vp.h;
       this.renderer.setViewport(vp.x, vp.y, vp.w, vp.h);
       this.renderer.setScissor(vp.x, vp.y, vp.w, vp.h);
 
-      // Update Camera for this player
-      // Maintain offset?
-      this.camera.position.set(player.position.x + 20, 20, player.position.y + 20);
-      this.camera.lookAt(player.position.x, 0, player.position.y);
+      let activeCamera: THREE.Camera;
 
-      // Adjust aspect ratio for orthographic camera if needed?
-      // Ortho camera frustum is defined by left/right/top/bottom
-      // We instantiated it with full screen aspect.
-      // Ideally we should update the camera frustum based on viewport aspect ratio.
-      const vpAspect = vp.w / vp.h;
-      const frustumSize = 40;
-      this.camera.left = (-frustumSize * vpAspect) / 2;
-      this.camera.right = (frustumSize * vpAspect) / 2;
-      this.camera.top = frustumSize / 2;
-      this.camera.bottom = -frustumSize / 2;
-      this.camera.updateProjectionMatrix();
+      // Calculate Car Forward Vector
+      // Physics Angle: 0 = +X, CCW.
+      // Vector: (cos(a), 0, sin(a))
+      const angle = player.angle;
+      const fwdX = Math.cos(angle);
+      const fwdZ = Math.sin(angle);
 
-      this.renderer.render(this.scene, this.camera);
+      if (mode === 0) {
+        // Mode 0: First Person (Perspective)
+        // Tune: FOV 100, Pos slightly back (-0.2), Look slightly down (Y=0.5 target)
+        this.perspectiveCamera.aspect = vpAspect;
+        this.perspectiveCamera.updateProjectionMatrix();
+
+        this.perspectiveCamera.position.set(
+          player.x - fwdX * 0.2,
+          1.1, // Eye height
+          player.y - fwdZ * 0.2
+        );
+        this.perspectiveCamera.lookAt(
+          player.x + fwdX * 20,
+          0.5, // Look slightly down
+          player.y + fwdZ * 20
+        );
+        activeCamera = this.perspectiveCamera;
+
+      } else if (mode === 1) {
+        // Mode 1: Third Person (Perspective)
+        // Pos: Car - Fwd*8 + Up*4
+        this.perspectiveCamera.aspect = vpAspect;
+        this.perspectiveCamera.updateProjectionMatrix();
+
+        this.perspectiveCamera.position.set(
+          player.x - fwdX * 8,
+          4,
+          player.y - fwdZ * 8
+        );
+        this.perspectiveCamera.lookAt(player.x, 1, player.y);
+        activeCamera = this.perspectiveCamera;
+
+      } else if (mode === 3) {
+        // Mode 3: Iso Relative (Car Faces Up) (Orthographic)
+        // Basically a Chase Cam but with Ortho
+        const frustumSize = 40;
+        this.camera.left = (-frustumSize * vpAspect) / 2;
+        this.camera.right = (frustumSize * vpAspect) / 2;
+        this.camera.top = frustumSize / 2;
+        this.camera.bottom = -frustumSize / 2;
+        this.camera.updateProjectionMatrix();
+
+        // Position camera "behind" the car in 3D space, looked down at 45 deg?
+        // To make car face UP on 2D screen, the camera needs to look from "behind" the car.
+        // And since it is Iso, we want a diagonal down look.
+        // Let's try placing camera -20 units behind car vector, and +20 up.
+
+        this.camera.position.set(
+          player.x - fwdX * 20,
+          20,
+          player.y - fwdZ * 20
+        );
+        this.camera.lookAt(player.x, 0, player.y);
+        activeCamera = this.camera;
+
+      } else {
+        // Mode 2 (Default): Iso Fixed (Orthographic)
+        const frustumSize = 40;
+        this.camera.left = (-frustumSize * vpAspect) / 2;
+        this.camera.right = (frustumSize * vpAspect) / 2;
+        this.camera.top = frustumSize / 2;
+        this.camera.bottom = -frustumSize / 2;
+        this.camera.updateProjectionMatrix();
+
+        // Fixed offset (-20, 20, -20)
+        this.camera.position.set(player.x - 20, 20, player.y - 20);
+        this.camera.lookAt(player.x, 0, player.y);
+        activeCamera = this.camera;
+      }
+
+      this.renderer.render(this.scene, activeCamera);
     });
   }
 }

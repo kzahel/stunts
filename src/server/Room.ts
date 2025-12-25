@@ -62,13 +62,16 @@ export class Room {
         // Add player to simulation
         // Note: For now we just add a player to the array. 
         // In a real game we might want to find a spawn point etc.
-        this.state.players.push({
-            position: { x: 150 + id * 5, y: 150 },
-            velocity: { x: 0, y: 0 },
-            angle: 0,
-            id: id // Add ID to player Schema if not exists, for now index based?
-        });
-
+        if (this.state.players.length < id + 1) {
+            this.state.players.push({
+                id: id,
+                x: 150 + id * 5,
+                y: 150,
+                velocity: { x: 0, y: 0 },
+                angle: 0,
+                angularVelocity: 0
+            });
+        }
         // Current Schema for player doesn't have ID, relies on index. 
         // This is fragile if players disconnect. 
         // TODO: Update Schema to have Player ID. 

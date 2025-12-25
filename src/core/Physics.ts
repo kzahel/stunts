@@ -1,46 +1,43 @@
 import type { WorldState, Input } from '../shared/Schema';
 
 export class PhysicsEngine {
-  public step(state: WorldState, inputs: Input[], dt: number): WorldState {
+  step(state: WorldState, inputs: Input[], dt: number): WorldState {
     // Deep clone to ensure immutability/determinism
-    const next: WorldState = JSON.parse(JSON.stringify(state)) as WorldState;
-    next.time += dt;
+    const next = JSON.parse(JSON.stringify(state)) as WorldState;
+    // next.time += dt;
 
-    // Basic Car Physics Parameters
-    const MAX_SPEED = 50; // units per second
-    const ACCEL_RATE = 20;
-    const TURN_RATE = 2.0;
+    next.players.forEach((player, i) => {
+      const input = inputs[i] || { accel: 0, steer: 0 };
 
-    next.players.forEach((player, index) => {
-      const input = inputs[index] || { accel: 0, steer: 0 };
+      // Update Velocity (Simple acceleration)
+      // const accel = input.accel * 500; // Removed unused
 
-      // Apply Steering
-      player.angle += input.steer * TURN_RATE * dt;
+      // Update Angle
+      player.angle += input.steer * 4.0 * dt; // Tuned turn rate
 
-      // Apply Acceleration (Simplified)
+      // Car Physics (Infinite Grip / Arcade)
       const forwardX = Math.cos(player.angle);
       const forwardY = Math.sin(player.angle);
 
-      // Current speed projection
+      // 1. Project current velocity onto new forward axis
       let currentSpeed = player.velocity.x * forwardX + player.velocity.y * forwardY;
 
-      // Apply acceleration
-      currentSpeed += input.accel * ACCEL_RATE * dt;
+      // 2. Apply Acceleration
+      const accelRate = 50; // units/sec^2 (was 100) -> Slower acceleration
+      currentSpeed += input.accel * accelRate * dt;
 
-      // Drag (Linear)
-      currentSpeed *= 1 - 0.5 * dt;
+      // 3. Apply Drag (Air resistance + Rolling resistance)
+      // Simple linear drag: speed = speed * (1 - drag * dt)
+      const drag = 1.0; // (was 0.8) Top speed ~= accelRate / drag ~= 50 units/s
+      currentSpeed *= Math.max(0, 1 - drag * dt);
 
-      // Cap speed
-      if (currentSpeed > MAX_SPEED) currentSpeed = MAX_SPEED;
-      if (currentSpeed < -MAX_SPEED) currentSpeed = -MAX_SPEED;
-
-      // Reconstruct velocity vector
+      // 4. Update Velocity Vector (aligned with heading = no drift)
       player.velocity.x = forwardX * currentSpeed;
       player.velocity.y = forwardY * currentSpeed;
 
-      // Integrate Position
-      player.position.x += player.velocity.x * dt;
-      player.position.y += player.velocity.y * dt;
+      // Update Position
+      player.x += player.velocity.x * dt;
+      player.y += player.velocity.y * dt;
     });
 
     return next;
