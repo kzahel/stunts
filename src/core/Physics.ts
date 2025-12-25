@@ -1,6 +1,6 @@
 import type { WorldState, Input, PhysicalBody } from '../shared/Schema';
 import type { Track } from '../shared/Track';
-import { TileType, TILE_SIZE } from '../shared/Track';
+import { TileType, TILE_SIZE, TRACK_SIZE } from '../shared/Track';
 
 // Vehicle Configuration
 interface VehicleConfig {
@@ -82,7 +82,7 @@ export class PhysicsEngine {
     const v = y - ty;
 
     // Boundary Check
-    if (tx < 0 || ty < 0 || tx >= 100 || ty >= 100) return -100; // Fall off map
+    if (tx < 0 || ty < 0 || tx >= TRACK_SIZE || ty >= TRACK_SIZE) return -100; // Fall off map
 
     const corners = track.getTileCornerHeights(tx, ty);
 
@@ -426,6 +426,27 @@ export class PhysicsEngine {
     body.x += body.velocity.x * dt;
     body.y += body.velocity.y * dt;
     body.z += body.vz * dt;
+
+    // World Boundary Enforce
+    const worldSize = TRACK_SIZE * TILE_SIZE;
+    // Allow a small margin (e.g. 1 meter) so we don't clip instantly at 0?
+    // Actually exact bounds 0..worldSize is fine.
+
+    if (body.x < 1) {
+      body.x = 1;
+      if (body.velocity.x < 0) body.velocity.x = -body.velocity.x * 0.5; // Bounce
+    } else if (body.x > worldSize - 1) {
+      body.x = worldSize - 1;
+      if (body.velocity.x > 0) body.velocity.x = -body.velocity.x * 0.5;
+    }
+
+    if (body.y < 1) {
+      body.y = 1;
+      if (body.velocity.y < 0) body.velocity.y = -body.velocity.y * 0.5;
+    } else if (body.y > worldSize - 1) {
+      body.y = worldSize - 1;
+      if (body.velocity.y > 0) body.velocity.y = -body.velocity.y * 0.5;
+    }
 
     // Floor Collision (Safety / Bottoming out)
     const centerAppsH = this.getHeightAt(body.x, body.y, track);
