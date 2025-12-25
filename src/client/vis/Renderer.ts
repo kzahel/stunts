@@ -60,8 +60,8 @@ export class GameRenderer {
       (frustumSize * aspect) / 2,
       frustumSize / 2,
       (frustumSize * aspect) / -2,
-      1,
-      1000,
+      -100,
+      2000,
     );
 
     this.perspectiveCamera = new THREE.PerspectiveCamera(100, aspect, 0.1, 1000);
@@ -601,7 +601,7 @@ export class GameRenderer {
         // And since it is Iso, we want a diagonal down look.
         // Let's try placing camera -20 units behind car vector, and +20 up.
 
-        this.camera.position.set(player.x - fwdX * 20, h + 20, player.y - fwdZ * 20);
+        this.camera.position.set(player.x - fwdX * 200, h + 200, player.y - fwdZ * 200);
         this.camera.lookAt(player.x, h, player.y);
         activeCamera = this.camera;
       } else {
@@ -613,8 +613,8 @@ export class GameRenderer {
         this.camera.bottom = -frustumSize / 2;
         this.camera.updateProjectionMatrix();
 
-        // Fixed offset (-20, 20, -20)
-        this.camera.position.set(player.x - 20, h + 20, player.y - 20);
+        // Fixed offset (-200, 200, -200) - Moving back to avoid near clipping on high terrain
+        this.camera.position.set(player.x - 200, h + 200, player.y - 200);
         this.camera.lookAt(player.x, h, player.y);
         activeCamera = this.camera;
       }
