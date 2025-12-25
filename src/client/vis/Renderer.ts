@@ -336,44 +336,82 @@ export class GameRenderer {
     state.players.forEach((player, i) => {
       const group = this.carMeshes[i];
 
-      // Calculate Terrain Height
-      const terrainHeight = this.getHeightAt(player.x, player.y);
+      // Use Physics Position directly (3D)
+      group.position.set(player.x, player.z, player.y);
 
-      group.position.set(player.x, terrainHeight, player.y);
+      // Orientation (Yaw, Pitch, Roll)
+      // Order: Yaw (Y) -> Pitch (X) -> Roll (Z)
+      // ThreeJS Rotation Order is usually 'XYZ'.
+      // Our Physics Mappings:
+      // Yaw 'angle' -> Around Y axis (since Y is Up in ThreeJS world, although we verified Y=Z earlier?)
+      // Wait, let's verify Coordinates transform.
+      // Physics: X,Y ground, Z height.
+      // ThreeJS: X right, Y up, Z forward?
+      // Renderer Setup: 
+      //   addQuad: params (x, y, cornerHeights). 
+      //   vertices.push(x1, hNW, z1) -> (X, Y, Z). 
+      //   So Height is Y in ThreeJS. Ground is X,Z.
+      //   Physics X -> ThreeJS X.
+      //   Physics Y -> ThreeJS Z.
+      //   Physics Z -> ThreeJS Y.
 
-      // Physics angle is CCW from +X (World X).
-      // ThreeJS +X is Right. +Z is Down (Screen).
-      // Car Model faces -Z (Forward).
-      // If Angle=0 (+X), we want car to face +X.
-      // Rotate -Z by +90deg (PI/2) -> +X.
-      // So Rotation = -Angle + PI/2. (Standard 2D->3D)
+      // Position Set: (player.x, player.z, player.y) -> Correct.
 
-      // Orientation with Terrain Normal
-      // 1. Create Quaternion for Heading (Y-axis rotation)
-      const qHeading = new THREE.Quaternion();
-      qHeading.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -player.angle + Math.PI / 2);
+      // Rotation:
+      // Physics Yaw (angle) is rotation around Z (Up). -> ThreeJS 'Y'.
+      // Physics Pitch (pitch) is rotation around Y (Right? No, Y is Left) -> ThreeJS 'X'?
+      // Physics Roll (roll) is rotation around X (Forward) -> ThreeJS 'Z'?
 
-      // 2. Create Quaternion for Terrain Slope
-      // Normal is Up vector. Default Up is (0,1,0).
-      const normal = this.getNormalAt(player.x, player.y);
-      const qSlope = new THREE.Quaternion();
-      qSlope.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
+      // Let's assume standard vehicle set:
+      // Yaw: around vertical axis. (ThreeJS Y). 
+      //   Physics Angle 0 = +X. +Angle = CCW.
+      //   ThreeJS: Rotate Y. +Angle = CCW around Y.
+      //   Car Model faces -Z. +X is -90deg.
+      //   So RotY = -angle + PI/2.
 
-      // Combine: Apply Heading then Slope? Or Slope is base frame?
-      // Usually: Rotate car to heading, then tilt to match normal.
-      // But calculating "Up" based on heading is tricky.
-      // Easier: qSlope * qHeading
+      // Pitch: Nose Up. Rotation around "Transverse" axis (World Z in ThreeJS? or Local X?)
+      //   Local X axis of Car Model (Right/Left).
+      //   Car faces -Z.
+      //   So Right is -X.
+      //   Nose UP -> Rotate around -X by +Pitch?
+      //   Or Rotate around X by -Pitch.
 
-      group.quaternion.copy(qSlope.multiply(qHeading));
+      // Roll: Tilt Left/Right. Rotation around "Longitudinal" axis (Local Z in ThreeJS? -Z)
+      //   Car faces -Z.
+      //   Roll Right -> Clockwise looking forward.
+      //   Physics Roll: Check direction.
+      //   Used (w.ly * Force). Left wheel pushes UP -> +Roll Torque.
+      //   If +Roll, Left side goes up. Car tilts Right.
+      //   So +Roll is "Roll Right".
+      //   ThreeJS: Rotate around -Z. 
+      //   Looking down -Z. CCW is +.
+      //   We want Clockwise. So -Roll?
+
+      // Let's use Quaternions to be safe.
+      const qYaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -player.angle + Math.PI / 2);
+      const qPitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), player.pitch); // Adjust sign if needed
+      const qRoll = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -player.roll); // Adjust sign if needed
+
+      // Order: Yaw -> Pitch -> Roll?
+      // group.quaternion.copy(qYaw.multiply(qPitch).multiply(qRoll)); 
+      // Note: multiply applies right-to-left in local? qA.multiply(qB) -> apply A then B?
+      // ThreeJS: qA * qB means Apply B then A.
+      // We want: Local Roll, then Local Pitch, then World Yaw.
+      // qTotal = qYaw * qPitch * qRoll
+
+      const qTotal = qYaw.clone();
+      qTotal.multiply(qPitch);
+      qTotal.multiply(qRoll);
+
+      group.quaternion.copy(qTotal);
 
       // Update Wheel Rotation (Steering)
       group.children.forEach((child) => {
         if (child.name === 'WheelFront') {
-          // Input steer is -1 (left) to 1 (right).
-          // Left turn: wheel rotates positive Y (CCW from top)
           child.rotation.y = -(player.steer || 0) * 0.5;
         }
       });
+
 
       group.visible = true;
 

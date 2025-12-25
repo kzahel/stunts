@@ -1,33 +1,60 @@
+
 import type { WorldState, Input, PhysicalBody } from '../shared/Schema';
 import type { Track } from '../shared/Track';
 import { TileType, TILE_SIZE } from '../shared/Track';
 
+// Vehicle Configuration
 interface VehicleConfig {
   mass: number; // kg
-  drag: number; // Air resistance coefficient
-  corneringStiffness: number; // N/rad
-  maxSteer: number; // radians
+
+  // Dimensions
   wheelBase: number; // meters
   trackWidth: number; // meters
+
+  // Suspension
+  suspensionRestLength: number; // meters (max length of spring)
+  suspensionStiffness: number; // N/m (Spring K)
+  suspensionDamping: number; // N*s/m (Damper b)
+
+  // Wheel Interaction
+  wheelRadius: number; // meters
+  frictionCoeff: number; // tire friction mu
+
+  // Engine
   engineForce: number; // Newtons
   brakeForce: number; // Newtons
   eBrakeForce: number; // Newtons
-  weightTransfer: number; // 0 to 1 simplified scalar
+  maxSteer: number; // radians
   driveTrain: 'FWD' | 'RWD' | 'AWD';
+
+  // Aero
+  drag: number; // Air resistance linear
 }
 
 const CAR_CFG: VehicleConfig = {
   mass: 1200,
-  drag: 2.5, // Air resistance
-  corneringStiffness: 12000,
-  maxSteer: 0.6, // ~34 degrees
   wheelBase: 2.5,
   trackWidth: 1.6,
+
+  // Suspension Tuning
+  // F = kx. At rest, gravity is supports 1/4 mass.
+  // F_g = 1200 * 9.81 / 4 = 2943 N per wheel.
+  // If we want 50% compression at rest (0.3m travel = 0.15m sag):
+  // k = 2943 / 0.15 = 19620
+  suspensionRestLength: 0.6, // Long travel for jumps
+  suspensionStiffness: 25000, // Stiffer for racing
+  suspensionDamping: 2000, // Damping ratio sqrt(4mk) approx
+
+  wheelRadius: 0.35,
+  frictionCoeff: 2.5,
+
   engineForce: 18000,
   brakeForce: 12000,
   eBrakeForce: 6000,
-  weightTransfer: 0.2, // Simple shift effect
-  driveTrain: 'RWD', // Drift friendly
+  maxSteer: 0.6,
+  driveTrain: 'RWD',
+
+  drag: 1.5,
 };
 
 export class PhysicsEngine {
@@ -42,357 +69,401 @@ export class PhysicsEngine {
     return next;
   }
 
-  private getHeightAt(worldX: number, worldY: number, track: Track): number {
+  // --- Terrain Helpers ---
+  public getHeightAt(worldX: number, worldY: number, track?: Track): number {
+    if (!track) return 0;
+
     // Convert World to Grid
     const x = worldX / TILE_SIZE;
     const y = worldY / TILE_SIZE;
 
-    // Bilinear interpolation
     const tx = Math.floor(x);
     const ty = Math.floor(y);
     const u = x - tx;
     const v = y - ty;
 
+    // Boundary Check
+    if (tx < 0 || ty < 0 || tx >= 100 || ty >= 100) return -100; // Fall off map
+
     const corners = track.getTileCornerHeights(tx, ty);
 
-    // Interpolate Top Edge (NW -> NE)
+    // Bilinear Interpolation
     const hTop = corners.nw * (1 - u) + corners.ne * u;
-    // Interpolate Bottom Edge (SW -> SE)
     const hBot = corners.sw * (1 - u) + corners.se * u;
 
-    // Interpolate Vertical
     return hTop * (1 - v) + hBot * v;
   }
 
-  private getNormalAt(x: number, y: number, track: Track): { x: number; y: number; z: number } {
-    // Gradient method or cross product of triangle?
-    // Bilinear patch normal is complex.
-    // Approximate by sampling nearby heights.
-    const h = this.getHeightAt(x, y, track);
-    const hx = this.getHeightAt(x + 0.1, y, track);
-    const hy = this.getHeightAt(x, y + 0.1, track);
+  private getSurfaceFriction(worldX: number, worldY: number, track?: Track): number {
+    if (!track) return 1.0;
+    const tx = Math.floor(worldX / TILE_SIZE);
+    const ty = Math.floor(worldY / TILE_SIZE);
 
-    // Vector 1: (0.1, 0, hx - h)
-    // Vector 2: (0, 0.1, hy - h)
-    // Normal = V2 x V1 (or V1 x V2 depending on handedness)
-    // We want Up to be +Y? No, in Physics Z is up?
-    // Wait, in Physics: x, y are ground plane.
-    // So "Height" is Z? Or "Y" in 3D rendering?
-    // Let's call Height "Z" for math here, but map to Y in renderer.
-    // Physics 2D: x, y. Height is extra dimension "Z".
+    // Boundary check
+    if (tx < 0 || ty < 0) return 0.5;
 
-    // V1 = (0.1, 0, hx-h)
-    // V2 = (0, 0.1, hy-h)
-    // N = (dy*vz - dz*vy, dz*vx - dx*vz, dx*vy - dy*vx)
-    // dx=0.1, dy=0, dz=hx-h
-    // dx=0, dy=0.1, dz=hy-h
+    const tile = track.getTile(tx, ty);
+    if (!tile) return 0.5;
 
-    // Nx = 0*(hy-h) - (hy-h)*0.1 = -(hy-h)*0.1 ?? No
-    // Cross Product:
-    // x   y   z
-    // 0.1 0   dz1
-    // 0   0.1 dz2
-
-    // Nx = 0*dz2 - dz1*0.1 = -0.1 * (hx - h) -> Wait this is slope x.
-    // Ny = dz1*0 - 0.1*dz2 = -0.1 * (hy - h)
-    // Nz = 0.1*0.1 - 0*0   = 0.01
-
-    // Normalize
-    const nx = -(hx - h) * 10; // Approx slope
-    const ny = -(hy - h) * 10;
-    const nz = 1;
-
-    const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
-    return { x: nx / len, y: ny / len, z: nz / len };
+    switch (tile.type) {
+      case TileType.Grass: return 0.4;
+      case TileType.Road: return 2.5;
+      case TileType.Start: return 2.5;
+      case TileType.Finish: return 2.5;
+      default: return 0.5;
+    }
   }
 
+  // --- Physics Simulation ---
   private updatePlayer(body: PhysicalBody, input: Input, dt: number, track?: Track) {
-    // 1. World Transform
-    const cosVal = Math.cos(body.angle);
-    const sinVal = Math.sin(body.angle);
+    // 1. Setup Car Frame
+    // Local to World Transform Basis
+    const cosYaw = Math.cos(body.angle);
+    const sinYaw = Math.sin(body.angle);
 
-    // Apply Slope Physics (Gravity)
-    if (track) {
-      // Get normal at center of car
-      const normal = this.getNormalAt(body.x, body.y, track);
-      // Gravity Vector is (0, 0, -g)
-      // We want component parallel to the plane defined by normal.
-      // Force = m * g * sin(slopeAngle)
-      // Or simply project gravity vector onto the plane.
-      // Downwards vector D = (0,0,-1).
-      // Tangent direction T = D - (D . N) * N
-      // (D . N) = -Nz
-      // T = (0,0,-1) - (-Nz) * (Nx, Ny, Nz)
-      // T = (Nx*Nz, Ny*Nz, -1 + Nz*Nz)
-      // We only care about x/y accel.
-      // AccelX = g * Nx * Nz
-      // AccelY = g * Ny * Nz
+    // NOTE: For full 3D rotation we need quaternions or 3x3 matrix.
+    // Given we store Yaw, Pitch, Roll, we can construct the Forward, Up, Right vectors.
+    // Simplified rotation sequence: Yaw(Z) * Pitch(X) * Roll(Z_local) ?? 
+    // Standard vehicle order: Yaw -> Pitch -> Roll
 
-      // Wait, simpler:
-      // Slide force is proportional to slope.
-      const gravity = 9.81 * 2; // Extra gravity feels better for cars
-      // verify signs:
-      // if slope goes UP in X (Nx < 0), we want force BACK in X (Negative).
-      // My normal Calc: Nx = -(hx-h). If hx > h, Nx is negative. Correct.
-      // So Fx = Nx * gravity?
-      // If flat: Nx=0. Force=0.
-      // If 45 deg up: hx-h=0.1. Nx = -1. Nz = 1? No.
-      // If hx-h=0.1 (over 0.1 step), slope = 1. Normal = (-1, 0, 1). Normalized (-0.7, 0, 0.7).
-      // Force should be -g * sin(45) = -g * 0.7.
-      // With Nx = -0.7. So Fx = Nx * g * (something).
-      // If we simpler assume normal z is close to 1 for shallow slopes:
-      // Fx = Nx * g (approx).
-      // Let's use `normal.x * gravity`.
+    // However, purely compounding Euler angles leads to Gimbal Lock.
+    // For this arcade level, we'll try to maintain small pitch/roll and use approximations,
+    // or build a rotation matrix each step.
 
-      body.velocity.x += normal.x * gravity * dt;
-      body.velocity.y += normal.y * gravity * dt;
-    }
+    // Let's compute basis vectors: Right, Up, Forward
+    // For now, small angle approximation for Pitch/Roll is risky for 45 deg slopes.
+    // Let's assume Body Rotation Matrix R.
 
-    // Local Velocity calculation
-    // Forward is +X in local space? No, usually in 2D games:
-    // Let's assume: Angle 0 = Points Right (+X).
-    // Forward Vector = (cos, sin)
-    // Side Vector = (-sin, cos)
+    // Construct Rotation Matrix from Yaw(y), Pitch(p), Roll(r)
+    // Cy = cos(yaw) ...
+    // But since javascript math functions are expensive, let's optimize slightly or just call them.
 
-    const localVelX = cosVal * body.velocity.x + sinVal * body.velocity.y; // Forward speed
-    const localVelY = -sinVal * body.velocity.x + cosVal * body.velocity.y; // Lateral speed
+    const cp = Math.cos(body.pitch);
+    const sp = Math.sin(body.pitch);
+    const cr = Math.cos(body.roll);
+    const sr = Math.sin(body.roll);
+    // Yaw uses 'angle'
+    const cy = cosYaw;
+    const sy = sinYaw;
 
-    // 2. Prepare visual steer
-    body.steer = input.steer * CAR_CFG.maxSteer;
+    // Rotation Matrix Columns (Forward, Right, Up)
+    // Standard aerospace: X=Forward, Y=Right, Z=Down (We use Z=Up)
+    // Let's stick to our Game Frame: Z=Up.
+    // Forward (Initial X)
+    // Right (Initial -Y (since we used to have Y as 'up' on screen maybe? No previously X,Y ground))
+    // Previous code: Angle 0 points Right (+X).
+    // Let's define: Car Forward is +X. Car Left is +Y. Car Up is +Z.
 
-    // 3. Wheel Physics
-    // We simulate 4 wheels.
+    // Rotate Yaw (around Z):
+    // [ cy  -sy   0 ]
+    // [ sy   cy   0 ]
+    // [ 0    0    1 ]
+
+    // Rotate Pitch (around Y - wait, pitch is usually local Y axis? Yes)
+    // Rotate Roll (around X - local X axis? Yes)
+
+    // Let's compute 'Local To World' vectors manually:
+    // Forward Vector (X_local):
+    // Yaw(Z) -> Pitch(new Y) -> Roll(new X)
+    // With Z Up.
+
+    // Fwd = [ cy*cp, sy*cp, sp ]
+    const fwdX = cy * cp;
+    const fwdY = sy * cp;
+    const fwdZ = sp;
+
+    // Right Vector (Y_local - Assuming Y is Left in Right-Handed Z-up if X is Fwd):
+    // R = [-sy*cr + cy*sp*sr,  cy*cr + sy*sp*sr,  -cp*sr]
+    // (Standard Euler conversion)
+    const rightX = -sy * cr + cy * sp * sr;
+    const rightY = cy * cr + sy * sp * sr;
+    const rightZ = -cp * sr;
+
+    // Up Vector (Z_local) - Unused
+    // U = [ sy*sr + cy*sp*cr, -cy*sr + sy*sp*cr,   cp*cr ]
+
+    // Forces Accumulator (World Space)
+    let forceX = 0;
+    let forceY = 0;
+    let forceZ = 0;
+
+    // Torque Accumulator (Local Space? Or World?)
+    // Easier to accumulate Torque in Local Space [Roll, Pitch, Yaw]
+    let torqueRoll = 0;  // X axis
+    let torquePitch = 0; // Y axis
+    let torqueYaw = 0;   // Z axis
+
+    // Apply Gravity
+    forceZ += -9.81 * CAR_CFG.mass * 2.5; // Extra gravity for snappy feel
+
+    // Define Wheel Offsets (Local Space)
+    const halfBase = CAR_CFG.wheelBase / 2;
+    const halfTrack = CAR_CFG.trackWidth / 2;
     // FL, FR, RL, RR
-    // Positions relative to center:
-    const halfL = CAR_CFG.wheelBase / 2;
-    const halfW = CAR_CFG.trackWidth / 2;
-
-    const wheelOffsets = [
-      { x: halfL, y: -halfW, id: 'FL' },
-      { x: halfL, y: halfW, id: 'FR' },
-      { x: -halfL, y: -halfW, id: 'RL' },
-      { x: -halfL, y: halfW, id: 'RR' },
+    // Forward is +X, Left is +Y
+    const wheels = [
+      { id: 'FL', lx: halfBase, ly: halfTrack, steer: true, drive: CAR_CFG.driveTrain !== 'RWD' },
+      { id: 'FR', lx: halfBase, ly: -halfTrack, steer: true, drive: CAR_CFG.driveTrain !== 'RWD' },
+      { id: 'RL', lx: -halfBase, ly: halfTrack, steer: false, drive: CAR_CFG.driveTrain !== 'FWD' },
+      { id: 'RR', lx: -halfBase, ly: -halfTrack, steer: false, drive: CAR_CFG.driveTrain !== 'FWD' }
     ];
 
-    let totalForceX = 0; // Forward/Back in local space
-    let totalForceY = 0; // Left/Right in local space
-    let totalTorque = 0;
+    let wheelsOnGround = 0;
+    let isSkidding = false;
 
-    // Weight distribution (simplified)
-    // Static weight per wheel
-    const weightPerWheel = (CAR_CFG.mass * 9.81) / 4;
+    // Visual steer update
+    body.steer = input.steer * CAR_CFG.maxSteer;
 
-    // Total speed for drag
-    // Total speed for drag
-    // const speed = Math.sqrt(body.velocity.x ** 2 + body.velocity.y ** 2);
-    // (Unused)
+    for (const w of wheels) {
+      // 1. Calculate Wheel World Position
+      // P_wheel = P_car + R * LocalPos
+      // LocalPos = (lx, ly, -wheelRadius/2 + offset?)
+      // Actually suspension mount point is usually distinct.
+      // Let's assume mount point is at height 0 relative to CM (Center of Mass).
 
-    wheelOffsets.forEach((w) => {
-      // Is this wheel steered?
-      const isFront = w.x > 0;
-      const wheelSteer = isFront ? body.steer : 0;
+      const wx = body.x + (fwdX * w.lx) + (rightX * w.ly);
+      const wy = body.y + (fwdY * w.lx) + (rightY * w.ly);
+      const wz = body.z + (fwdZ * w.lx) + (rightZ * w.ly); // Mount point Z
 
-      // World position of the wheel for Surface lookup
-      // Body Pos + Rotate(WheelOffset)
-      const wx = body.x + (cosVal * w.x - sinVal * w.y);
-      const wy = body.y + (sinVal * w.x + cosVal * w.y);
+      // 2. Raycast Down
+      const groundH = this.getHeightAt(wx, wy, track);
 
-      // Surface Traction
-      let frictionCoeff = 1.0; // Tarmac default
-      if (track) {
-        // Convert world units to tiles.
-        const tx = Math.floor(wx / TILE_SIZE);
-        const ty = Math.floor(wy / TILE_SIZE);
-        const tile = track.getTile(tx, ty);
-        if (tile) {
-          switch (tile.type) {
-            case TileType.Grass:
-              frictionCoeff = 0.4;
-              break;
-            case TileType.Road:
-              frictionCoeff = 2.5;
-              break; // Racing Rubber
-            case TileType.Start:
-              frictionCoeff = 2.5;
-              break;
-            case TileType.Finish:
-              frictionCoeff = 2.5;
-              break;
-            default:
-              frictionCoeff = 0.5;
-          }
-        } else {
-          // Off map
-          frictionCoeff = 0.3;
+      // Calculate Distance from Mount Point to Ground
+      // Vector from Mount to Ground: (0, 0, groundH - wz) assuming vertical raycast
+      // Note: "Vertical" raycast is simple. Real raycast vehicle uses "Down" vector of car.
+      // Let's use Vertical for stability on simple terrain grids.
+      const distToGround = wz - groundH;
+
+      const maxLength = CAR_CFG.suspensionRestLength + CAR_CFG.wheelRadius;
+
+      if (distToGround < maxLength) {
+        wheelsOnGround++;
+
+        // 3. Suspension Force
+        // Spring Compression
+        // distToGround = Current Length. 
+        // Compression = RestLength - CurrentLength
+        // Actually we include wheel radius.
+        // Suspension extends from Mount downwards.
+        // Contact point is at (distance - radius).
+        // Let's treat 'suspensionRestLength' as the spring length.
+        // Spring Compression = (RestLength) - (distToGround - WheelRadius)
+        // If distToGround = WheelRadius, compression = RestLength (Fully Compressed) -> Huge force
+        // If distToGround = MaxLength, compression = 0.
+
+        // Let's use:
+        // compression = 1.0 - (distToGround / maxLength) ? No linear K
+        // compression = maxLength - distToGround;
+
+        const compression = maxLength - distToGround;
+
+        // Spring Force = k * x
+        const springForce = CAR_CFG.suspensionStiffness * compression;
+
+        // Damping Force
+        // Need velocity of the suspension compression.
+        // Velocity of mount point Z?
+        // Vel_mount = Vel_car + Omega x R_mount
+
+        // Velocity is vector (vx, vy, vz)
+        // Omega is (vRoll, vPitch, angularVelocity) in local or world?
+        // Let's assume state velocities are correct.
+
+        // Since we are doing vertical raycast, we only care about vertical velocity of the point relative to ground.
+        // V_point_z = body.vz + (cross product components in Z)
+
+        // V_point = V_cm + Omega x R
+        // Omega_world approx?
+        // Converting Local Angular Velocity to World is complex without quaternions.
+        // Let's approximate:
+        // V_point_z approx = body.vz + (body.vPitch * w.lx) - (body.vRoll * w.ly) 
+        // (Pitch up -> Front moves Up)
+        // (Roll right -> Left moves Up)
+
+        const pointVz = body.vz + (body.vPitch * w.lx) - (body.vRoll * w.ly); // Approx
+        const damperForce = -CAR_CFG.suspensionDamping * pointVz;
+
+        const suspensionForce = springForce + damperForce;
+
+        // Apply Suspension vertical Force (World Z)
+        // Only if pushing UP (ignore pulling down unless sticky, we'll ignore pull)
+        const finalSuspForce = Math.max(0, suspensionForce);
+
+        // Apply to Body
+        // F_z = finalSuspForce
+        // Torque? Pushing UP at (lx, ly).
+        // Pitch Torque (Rotation around Y): Force * dist_X? No.
+        // Cross product: r x F
+        // r = (lx, ly, 0)
+        // F = (0, 0, Fz) (Vertical World Force, treated as Local Up approx for torque)
+        // Torque = (ly*Fz - 0, 0 - lx*Fz, 0) -> (Roll Torq, Pitch Torq, Yaw Torq)
+        // Torque_x (Roll) = ly * Fz. (Left wheel at +ly pushes up -> Roll Right (-angle)) -> Wait.
+        // Right hand rule: +X axis is Forward. +Y is Left. +Z is Up.
+        // Force at +Y (Left): Torque Vector is r x F = (0, y, 0) x (0, 0, F) = (y*F, 0, 0).
+        // +X Torque is Roll? Yes.
+        // If Left wheel pushes UP, car rolls to Right (negative Roll angle?).
+        // If +Torque X, rotation is counter-clockwise looking from X.
+        // Left side (+Y) goes UP? Yes.
+        // So Left Wheel Push -> +Roll Torque.
+
+        forceZ += finalSuspForce;
+        torqueRoll += w.ly * finalSuspForce;
+        torquePitch -= w.lx * finalSuspForce; // Front wheel (+x) pushes Up -> -Pitch (Nose Up)
+
+
+        // 4. Tire Friction (Longitudinal & Lateral)
+        // Traction is applied in the Ground Plane (tangent).
+        // We need local velocity at the contact patch.
+
+        // Velocity at contact patch in world space (approx):
+        // V_contact = V_cm + Omega x R_contact
+
+        // R_contact in World Space:
+        const rx = wx - body.x;
+        const ry = wy - body.y;
+
+        // V_point = V_cm + Omega x R
+        // Omega x R = (-ang * ry, ang * rx)
+        const patchVx = body.velocity.x - body.angularVelocity * ry;
+        const patchVy = body.velocity.y + body.angularVelocity * rx;
+
+        // Project into Wheel's Local Direction
+        // Wheel Heading = Car Yaw + Steer Angle
+        const steerAngle = w.steer ? body.steer : 0;
+        const wheelHeading = body.angle + steerAngle;
+
+        // Wheel Forward Vector (World Space)
+        const wheelRx = Math.cos(wheelHeading);
+        const wheelRy = Math.sin(wheelHeading);
+        // Side vector (Left)
+        const wheelSx = -Math.sin(wheelHeading);
+        const wheelSy = Math.cos(wheelHeading);
+
+        // Project Velocity into Wheel Frame
+        const velForward = (patchVx * wheelRx) + (patchVy * wheelRy);
+        const velSide = (patchVx * wheelSx) + (patchVy * wheelSy);
+
+        // Forces
+        const frictionLimit = finalSuspForce * this.getSurfaceFriction(wx, wy, track) * CAR_CFG.frictionCoeff;
+
+        // Lateral (Cornering)
+        let latForce = -velSide * CAR_CFG.mass * 10; // Simple stiff spring for cornering
+        // Clamp
+        if (Math.abs(latForce) > frictionLimit) {
+          latForce = Math.sign(latForce) * frictionLimit;
+          // Mark Skid if at limit
+          isSkidding = true;
         }
-      }
 
-      // Calculate Wheel Velocity
-      // V_wheel = V_car + Omega x R_wheel
-      // 2D Cross product scalar: w * r
-      const wy_rot = body.angularVelocity * w.x; // Tangential velocity Y component contrib
-      const wx_rot = -body.angularVelocity * w.y; // Tangential velocity X component contrib
-
-      const wheelVx = localVelX + wx_rot; // Local forward velocity at wheel
-      const wheelVy = localVelY + wy_rot; // Local lateral velocity at wheel
-
-      // Slip Angle
-      // alpha = atan2(Vy, Vx) - delta_steer
-      // Important: handle low speed stability (divide by zero or huge slip at 0 speed)
-      const minSpeed = 0.1;
-      let slipAngle = 0;
-      if (Math.abs(wheelVx) > minSpeed) {
-        slipAngle = Math.atan2(wheelVy, wheelVx) - wheelSteer;
-      }
-
-      // Lateral Force (Cornering)
-      // F_lat = C_alpha * alpha
-      // Clamped by Friction limits: MaxF = NormalForce * mu
-      const load = weightPerWheel; // simplify dynamic load transfer for stability first
-      const maxFriction = load * frictionCoeff;
-
-      let latForce = -CAR_CFG.corneringStiffness * slipAngle;
-
-      // Cap lateral force
-      // Standard "Friction Circle" simplified: just clamp independent? or combine?
-      // Let's clamp lateral first.
-      if (Math.abs(latForce) > maxFriction) {
-        latForce = Math.sign(latForce) * maxFriction;
-      }
-
-      // Longitudinal Force (Drive / Brake)
-      let longForce = 0;
-
-      // Drive
-      if (input.accel > 0) {
-        // Gas
-        let drive = false;
-        if (CAR_CFG.driveTrain === 'AWD') drive = true;
-        if (CAR_CFG.driveTrain === 'FWD' && isFront) drive = true;
-        if (CAR_CFG.driveTrain === 'RWD' && !isFront) drive = true;
-
-        if (drive) {
-          longForce += input.accel * (CAR_CFG.engineForce / (CAR_CFG.driveTrain === 'AWD' ? 4 : 2));
+        // Longitudinal (Drive/Brake)
+        let longForce = 0;
+        if (input.accel > 0 && w.drive) {
+          longForce = input.accel * (CAR_CFG.engineForce / (CAR_CFG.driveTrain === 'AWD' ? 4 : 2));
+        } else if (input.accel < 0) {
+          // Braking (simplification: all wheels brake)
+          longForce = input.accel * (CAR_CFG.brakeForce / 4);
         }
-      } else if (input.accel < 0) {
-        // Brake / Reverse
-        // Simple logic: if moving forward, brake. If stopped/reversing, reverse.
-        // Dot product to check direction?
-        if (localVelX > 0.5) {
-          // Brakes apply to all wheels
-          longForce += input.accel * (CAR_CFG.brakeForce / 4); // accel is negative here
-        } else {
-          // Reverse (treat as RWD engine usually, or just apply backwards force)
-          // Let's just apply simplified reverse force
-          longForce += input.accel * (CAR_CFG.engineForce / 2); // lower reverse power
+
+        if (input.handbrake && !w.steer) {
+          // Lock rear wheels
+          longForce = -Math.sign(velForward) * frictionLimit;
+          latForce = 0; // Loss of grip sideways
+          isSkidding = true;
         }
+
+        // Combine Forces Limit
+        const totalForce = Math.sqrt(longForce ** 2 + latForce ** 2);
+        if (totalForce > frictionLimit) {
+          const scale = frictionLimit / totalForce;
+          longForce *= scale;
+          latForce *= scale;
+          if (Math.abs(velSide) > 1.0) isSkidding = true; // Slide
+        }
+
+        // Transform back to World
+        // F_world = F_long * FwdVec + F_lat * SideVec
+        const fWx = longForce * wheelRx + latForce * wheelSx;
+        const fWy = longForce * wheelRy + latForce * wheelSy;
+
+        forceX += fWx;
+        forceY += fWy;
+
+
+
+        // Add Torque from Friction
+        // Torque Z (Yaw)
+        // Moment arm in World Space:
+        // (Calculated above: rx, ry)
+
+        // Torque = r x F (2D Cross Product)
+        // (rx * Fy - ry * Fx)
+        torqueYaw += rx * fWy - ry * fWx;
       }
+    }
 
-      // Handbrake
-      if (input.handbrake && !isFront) {
-        // Lock rears = high friction sliding?
-        // Or massive drag?
-        // Physical model: Friction circle. If we use all traction for braking, zero for cornering?
-        // Simplified: Add huge drag force, reduce cornering stiffness effectively?
-        // Let's replace the calculated longForce with a friction-limited drag
-        longForce = -Math.sign(wheelVx) * maxFriction * 0.95;
-        // Reduce lateral capability when locked
-        latForce *= 0.05;
-      }
+    // 2. Integration (Symplectic Euler)
+    const invMass = 1.0 / CAR_CFG.mass;
 
-      // Apply Friction Circle cap on total force
-      // F_total^2 = F_lat^2 + F_long^2 <= MaxF^2
-      // We prioritize Lateral (turning) or Longitudinal (braking)?
-      // Tires usually lose steering when braking hard (lock up).
-      // So verify magnitude.
-      const currentForceMag = Math.sqrt(longForce ** 2 + latForce ** 2);
-      if (currentForceMag > maxFriction) {
-        const scale = maxFriction / currentForceMag;
-        longForce *= scale;
-        latForce *= scale;
-      }
-
-      // Add to chassis totals
-      // We need to rotate these forces back from Wheel Heading to Car Heading?
-      // Yes, the wheel forces are computed in the *Wheel's* frame?
-      // No, `latForce` is perpendicular to wheel heading. `longForce` is parallel.
-      // So we have force in direction of Wheel Angle.
-
-      const cosSteer = Math.cos(wheelSteer);
-      const sinSteer = Math.sin(wheelSteer);
-
-      // Force in Car Local Space
-      // F_car_x = F_long * cos(steer) - F_lat * sin(steer)
-      // F_car_y = F_long * sin(steer) + F_lat * cos(steer)
-
-      const fx = longForce * cosSteer - latForce * sinSteer;
-      const fy = longForce * sinSteer + latForce * cosSteer;
-
-      totalForceX += fx;
-      totalForceY += fy;
-
-      // Torque = r x F (2D)
-      // r = (w.x, w.y)
-      // torque = x * Fy - y * Fx
-      totalTorque += w.x * fy - w.y * fx;
-    });
-
-    // Check skidding status using similar logic for average/worst case?
-    // Actually we need to track if ANY wheel skidded?
-    // Let's re-run a simplified check or just assume if lateral slip OR accel is huge
-    // For now, let's just say if we are drifting (lateral slip high) or burning out
-    // Re-calculating proper skid per wheel is ideal but expensive to do twice.
-    // Let's rely on slip angle for drift, and input for burnout?
-    // But we clamped forces in the loop.
-    // Hack: if handbrake is on or high steer + high speed, skid = true.
-    // Better: if |latForce| was clamped or |longForce| was clamped.
-    // As we can't extract variables from the loop easily without refactoring 'updatePlayer's loop...
-    // Let's just refactor the loop to track a 'skidCount'.
-
-    // Actually, simple physics heuristic:
-    // Skidding if abs(angularVelocity) is high (>2 rad/s) AND speed > 5? (Drift)
-    // Skidding if input.accel > 0 and speed < 5 (Burnout?) - No, speed grows fast.
-
-    // Let's use the handbrake flag and slip angle estimation on rear wheels.
-    // Rear Slip Angle approx = atan2(localVelY - angularVel * x_rear, localVelX)
-    // If slip angle > 0.3 rad -> skid.
-
-    const rearSlip = Math.atan2(
-      localVelY - (body.angularVelocity * -CAR_CFG.wheelBase) / 2,
-      localVelX,
-    );
-    const slipThreshold = 0.3; // ~17 degrees
-    const isDrifting = Math.abs(rearSlip) > slipThreshold && Math.abs(localVelX) > 2;
-    const isBurnout = input.accel > 0 && Math.abs(localVelX) < 1.0 && CAR_CFG.engineForce > 10000; // Crude start check
-
-    body.skidding = isDrifting || input.handbrake || isBurnout; // Simplified skid flag
-
-    // 4. Integration
     // Linear
-    // Drag/Air resistance (in local forward approx)
-    totalForceX -= CAR_CFG.drag * localVelX * Math.abs(localVelX);
-    totalForceY -= CAR_CFG.drag * localVelY * Math.abs(localVelY) * 5; // High lateral drag if sliding sideways (body resistance)
+    body.velocity.x += forceX * invMass * dt;
+    body.velocity.y += forceY * invMass * dt;
+    body.vz += forceZ * invMass * dt;
 
-    // Convert Local Force to World Accel
-    // F_world = Rotate(F_local, angle)
-    const accelX = (cosVal * totalForceX - sinVal * totalForceY) / CAR_CFG.mass;
-    const accelY = (sinVal * totalForceX + cosVal * totalForceY) / CAR_CFG.mass;
+    // Drag
+    body.velocity.x *= (1 - 0.01);
+    body.velocity.y *= (1 - 0.01);
+    body.vz *= (1 - 0.015); // Air resistance Z
 
-    body.velocity.x += accelX * dt;
-    body.velocity.y += accelY * dt;
-
-    // Angular
-    const inertia = (CAR_CFG.mass * (CAR_CFG.wheelBase ** 2 + CAR_CFG.trackWidth ** 2)) / 12; // Box approx
-    const angularAccel = totalTorque / inertia;
-
-    // Angular Damping
-    body.angularVelocity += angularAccel * dt;
-    body.angularVelocity *= 0.95; // Damping
-
-    body.angle += body.angularVelocity * dt;
-
-    // Position
+    // Update Position
     body.x += body.velocity.x * dt;
     body.y += body.velocity.y * dt;
+    body.z += body.vz * dt;
+
+    // Floor Collision (Safety / Bottoming out)
+    const centerAppsH = this.getHeightAt(body.x, body.y, track);
+    if (body.z < centerAppsH + 0.2) {
+      // Hard floor collision
+      body.z = centerAppsH + 0.2;
+      if (body.vz < 0) body.vz = -body.vz * 0.2; // Bounce slightly
+    }
+
+    // Angular
+    // Inertia Tensor approx (Box)
+    // Ixx (Roll), Iyy (Pitch), Izz (Yaw)
+    const Ixx = CAR_CFG.mass * (CAR_CFG.trackWidth ** 2) / 6; // Approx
+    const Iyy = CAR_CFG.mass * (CAR_CFG.wheelBase ** 2) / 6;
+    const Izz = CAR_CFG.mass * (CAR_CFG.wheelBase ** 2 + CAR_CFG.trackWidth ** 2) / 12;
+
+    body.vRoll += torqueRoll / Ixx * dt;
+    body.vPitch += torquePitch / Iyy * dt;
+    body.angularVelocity += torqueYaw / Izz * dt;
+
+    // Angular Damping
+    body.vRoll *= 0.95;
+    body.vPitch *= 0.95;
+    body.angularVelocity *= 0.95;
+
+    // Correct Pitch/Roll (Spring back to upright if in air? Or let it tumble?)
+    // Real cars stabilize. Let's add a "Righting movement" if airborne or unstable?
+    // Suspension usually handles it.
+    // But we need to prevent flipping for fun arcade physics?
+    if (wheelsOnGround === 0) {
+      // Air Control (optional)
+      // Damping
+      body.vPitch *= 0.98;
+      body.vRoll *= 0.98;
+
+      // Self-Righting Torque (Arcade Magic)
+      body.vRoll -= body.roll * 2.0 * dt;
+      body.vPitch -= body.pitch * 2.0 * dt;
+    }
+
+    // Update Angles
+    body.roll += body.vRoll * dt;
+    body.pitch += body.vPitch * dt;
+    body.angle += body.angularVelocity * dt;
+
+    // Status
+    body.skidding = isSkidding;
   }
 }

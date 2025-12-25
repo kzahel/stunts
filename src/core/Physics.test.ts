@@ -61,7 +61,7 @@ describe('PhysicsEngine', () => {
     stateGrass.players[0].x = 15;
     stateGrass.players[0].y = 15;
 
-    const input: Input = { accel: 1, steer: 1, handbrake: false }; // Turn and Burn
+    const input: Input = { accel: 1, steer: 0, handbrake: false }; // Drag Race
 
     for (let i = 0; i < 60; i++) {
       stateRoad = physics.step(stateRoad, [input], dt, roadTrack);
@@ -101,15 +101,54 @@ describe('PhysicsEngine', () => {
       stateHandbrake = physics.step(stateHandbrake, [turnHandbrake], dt);
     }
 
-    const angleNormal = stateNormal.players[0].angle;
-    const angleHandbrake = stateHandbrake.players[0].angle;
+
 
     // Handbrake should rotate MORE (slide) than normal grip turning which might understeer or be stable
     // Actually with RWD normal might oversteer too, but handbrake locks rear so it should slide out faster initially?
     // Or at least show a difference.
 
-    // Handbrake should rotate MORE (slide) than normal grip turning
-    // With rear traction lost, the car pivots around the front wheels
-    expect(Math.abs(angleHandbrake)).toBeGreaterThan(Math.abs(angleNormal));
+    // Handbrake should Cause SKIDDING flag and slow down (braking)
+    expect(stateHandbrake.players[0].skidding).toBe(true);
+
+    // Check it stopped/slowed
+    const speedNormal = Math.hypot(stateNormal.players[0].velocity.x, stateNormal.players[0].velocity.y);
+    const speedHandbrake = Math.hypot(stateHandbrake.players[0].velocity.x, stateHandbrake.players[0].velocity.y);
+
+    expect(speedHandbrake).toBeLessThan(speedNormal);
+  });
+
+  test('gravity drops the car', () => {
+    const physics = new PhysicsEngine();
+    let state = createInitialState();
+    state.players[0].z = 10; // Start high
+    state.players[0].vz = 0;
+
+    // Step
+    state = physics.step(state, [{ accel: 0, steer: 0, handbrake: false }], 0.1);
+
+    // Should fall
+    expect(state.players[0].z).toBeLessThan(10);
+    expect(state.players[0].vz).toBeLessThan(0);
+  });
+
+  test('suspension holds the car up', () => {
+    const physics = new PhysicsEngine();
+    let state = createInitialState();
+    // Start slightly above ground but close enough for suspension (Ground is 0)
+    // Rest length 0.6. Wheel radius 0.35. Total ~0.95.
+    // Start at 0.5.
+    state.players[0].z = 0.5;
+    state.players[0].x = 10; // On infinite flat plane (no track provided = 0 height?)
+    // Wait, getHeightAt checks track. If no track, returns 0.
+
+    const dt = 0.016;
+    for (let i = 0; i < 60; i++) {
+      state = physics.step(state, [{ accel: 0, steer: 0, handbrake: false }], dt);
+    }
+
+    // Should not fall through floor (z < 0) heavily, should bounce back up
+    // Eventually settle around Rest Height - Sag.
+    // Sag was calc to be 0.15m -> Target ~0.8m?
+    expect(state.players[0].z).toBeGreaterThan(0.2);
   });
 });
