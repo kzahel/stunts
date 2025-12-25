@@ -48,7 +48,18 @@ const ui = new UIManager(
 );
 
 // Editor Init
-const editor = new Editor(track, renderer, renderer.domElement, ui);
+const editor = new Editor(track, renderer, renderer.domElement, ui, () => {
+  // On Map Change: Broadcast to server
+  if (clients.length > 0) {
+    const payload = track.serialize();
+    clients.forEach(c => {
+      c.send({
+        type: ClientMessageType.MAP_UPDATE,
+        payload: payload
+      });
+    });
+  }
+});
 editor.setScene(renderer.getScene());
 
 // Game Server (Local)
@@ -129,6 +140,14 @@ function startGame(settings: GameSettings, overrideTickRate: number = 60) {
           simState = payload.initialState;
         }
       }
+
+      if (msg.type === ServerMessageType.MAP_SYNC) {
+        const payload = msg.payload as any;
+        track.deserialize(payload);
+        renderer.initTrackOrUpdate(track);
+        // If editor needs refresh?
+        // editor.setTrack(track); // it references same object
+      }
       if (msg.type === ServerMessageType.STATE) {
         // "Naive" Reconciliation: Overwrite local state with server state
         // This is what snaps the local player.
@@ -136,9 +155,7 @@ function startGame(settings: GameSettings, overrideTickRate: number = 60) {
 
         // 1. Update Prediction (Snap)
         if (i === 0) {
-          // Only do this once, not per client
-          // In a perfect prediction, serverState should match simState very closely.
-          // We just snap for now.
+          // Only do this once, not per client (as we share the simState)
           simState = serverState;
 
           // 2. Add to Interpolation Buffer

@@ -167,4 +167,22 @@ export class Track {
       }
     }
   }
+
+  public serialize(): any {
+    return {
+      tiles: this.tiles,
+      heightMap: Array.from(this.heightMap)
+    };
+  }
+
+  public deserialize(data: any) {
+    if (data.tiles) {
+      // Deep copy or assign?
+      // Type safety is minimal here for validation
+      this.tiles = data.tiles;
+    }
+    if (data.heightMap && Array.isArray(data.heightMap)) {
+      this.heightMap = new Float32Array(data.heightMap);
+    }
+  }
 }

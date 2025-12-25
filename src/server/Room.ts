@@ -75,9 +75,15 @@ export class Room {
         id: id,
         x: 150 + id * 5,
         y: 150,
+        z: 0.5,
         velocity: { x: 0, y: 0 },
+        vz: 0,
         angle: 0,
         angularVelocity: 0,
+        pitch: 0,
+        vPitch: 0,
+        roll: 0,
+        vRoll: 0,
         steer: 0,
         skidding: false,
       });
@@ -118,6 +124,25 @@ export class Room {
       if (client) {
         client.input = inputMsg.payload;
       }
+    }
+
+    if (msg.type === ClientMessageType.MAP_UPDATE) {
+      // Apply map update
+      const mapMsg = msg as { type: string, payload: any }; // Type assertion
+      // Ideally validate
+
+      // Apply to server track
+      this.track.deserialize(mapMsg.payload);
+
+      // Broadcast to others? 
+      // Or just let them know?
+      // Ideally we broadcast a MAP_SYNC or relay the update.
+      // Let's relay.
+      // Note: We should probably only allow "Host" to update map, but for now any client.
+      this.broadcast({
+        type: ServerMessageType.MAP_SYNC,
+        payload: mapMsg.payload
+      });
     }
   }
 

@@ -32,15 +32,17 @@ export class Editor {
 
     private ui: UIManager;
 
-    constructor(track: Track, renderer: GameRenderer, canvas: HTMLCanvasElement, ui: UIManager) {
+    private onMapChange: (() => void) | null = null;
+
+    constructor(track: Track, renderer: GameRenderer, canvas: HTMLCanvasElement, ui: UIManager, onMapChange?: () => void) {
         this.track = track;
         this.renderer = renderer;
         this.canvas = canvas;
         this.ui = ui;
+        this.onMapChange = onMapChange || null;
 
         // Square Brush (Tile Size)
         const geo = new THREE.PlaneGeometry(TILE_SIZE, TILE_SIZE);
-        geo.rotateX(-Math.PI / 2); // Flat
         const mat = new THREE.MeshBasicMaterial({
             color: 0xffff00,
             transparent: true,
@@ -49,6 +51,7 @@ export class Editor {
             depthTest: false, // Always show on top
             depthWrite: false
         });
+        geo.rotateX(-Math.PI / 2); // Flat
         this.highlightMesh = new THREE.Mesh(geo, mat);
         this.highlightMesh.visible = false;
         this.highlightMesh.renderOrder = 999;
@@ -57,6 +60,10 @@ export class Editor {
     public setScene(scene: THREE.Scene) {
         this.scene = scene;
         this.scene.add(this.highlightMesh);
+    }
+
+    private notifyChange() {
+        if (this.onMapChange) this.onMapChange();
     }
 
     public setTrack(track: Track) {
@@ -159,6 +166,7 @@ export class Editor {
         // Propagate
         corners.forEach(c => this.track.enforceSlopeConstraints(c.x, c.y));
         this.renderer.initTrackOrUpdate(this.track);
+        this.notifyChange();
     }
 
     private applyLower(cx: number, cy: number) {
@@ -190,6 +198,7 @@ export class Editor {
 
         corners.forEach(c => this.track.enforceSlopeConstraints(c.x, c.y));
         this.renderer.initTrackOrUpdate(this.track);
+        this.notifyChange();
     }
 
     public onMouseDown() {
@@ -216,6 +225,7 @@ export class Editor {
                 case EditorTool.Flatten:
                     this.track.flattenRegion(tx, ty, 1, 0);
                     this.renderer.initTrackOrUpdate(this.track);
+                    this.notifyChange();
                     break;
             }
         }

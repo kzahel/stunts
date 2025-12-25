@@ -37,15 +37,21 @@ export function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
+export function lerpAngle(a: number, b: number, t: number): number {
+  const diff = b - a;
+  const wrapped = diff - Math.floor(diff / (Math.PI * 2) + 0.5) * (Math.PI * 2);
+  return a + wrapped * t;
+}
+
 export function lerpBody(a: PhysicalBody, b: PhysicalBody, t: number): PhysicalBody {
   return {
     id: b.id, // ID should match
     x: lerp(a.x, b.x, t),
     y: lerp(a.y, b.y, t),
     z: lerp(a.z, b.z, t),
-    angle: lerp(a.angle, b.angle, t), // Note: For full correctness, need shortest path angle interpolation
-    pitch: lerp(a.pitch, b.pitch, t),
-    roll: lerp(a.roll, b.roll, t),
+    angle: lerpAngle(a.angle, b.angle, t),
+    pitch: lerpAngle(a.pitch, b.pitch, t),
+    roll: lerpAngle(a.roll, b.roll, t),
     velocity: {
       x: lerp(a.velocity.x, b.velocity.x, t),
       y: lerp(a.velocity.y, b.velocity.y, t),

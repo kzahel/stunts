@@ -280,7 +280,7 @@ export class PhysicsEngine {
         // (Pitch up -> Front moves Up)
         // (Roll right -> Left moves Up)
 
-        const pointVz = body.vz + (body.vPitch * w.lx) - (body.vRoll * w.ly); // Approx
+        const pointVz = body.vz + (body.vPitch * w.lx) - (body.vRoll * w.ly);
         const damperForce = -CAR_CFG.suspensionDamping * pointVz;
 
         const suspensionForce = springForce + damperForce;
@@ -307,8 +307,8 @@ export class PhysicsEngine {
         // So Left Wheel Push -> +Roll Torque.
 
         forceZ += finalSuspForce;
-        torqueRoll += w.ly * finalSuspForce;
-        torquePitch -= w.lx * finalSuspForce; // Front wheel (+x) pushes Up -> -Pitch (Nose Up)
+        torqueRoll -= w.ly * finalSuspForce; // Left (+y) Push Up -> Decrease Roll (Left Up)
+        torquePitch += w.lx * finalSuspForce; // Front (+x) Push Up -> Increase Pitch (Nose Up)
 
 
         // 4. Tire Friction (Longitudinal & Lateral)
