@@ -1,6 +1,6 @@
 import type { WorldState, Input, PhysicalBody } from '../shared/Schema';
 import type { Track } from '../shared/Track';
-import { TileType } from '../shared/Track';
+import { TileType, TILE_SIZE } from '../shared/Track';
 
 interface VehicleConfig {
   mass: number; // kg
@@ -42,10 +42,111 @@ export class PhysicsEngine {
     return next;
   }
 
+  private getHeightAt(worldX: number, worldY: number, track: Track): number {
+    // Convert World to Grid
+    const x = worldX / TILE_SIZE;
+    const y = worldY / TILE_SIZE;
+
+    // Bilinear interpolation
+    const tx = Math.floor(x);
+    const ty = Math.floor(y);
+    const u = x - tx;
+    const v = y - ty;
+
+    const corners = track.getTileCornerHeights(tx, ty);
+
+    // Interpolate Top Edge (NW -> NE)
+    const hTop = corners.nw * (1 - u) + corners.ne * u;
+    // Interpolate Bottom Edge (SW -> SE)
+    const hBot = corners.sw * (1 - u) + corners.se * u;
+
+    // Interpolate Vertical
+    return hTop * (1 - v) + hBot * v;
+  }
+
+  private getNormalAt(x: number, y: number, track: Track): { x: number; y: number; z: number } {
+    // Gradient method or cross product of triangle?
+    // Bilinear patch normal is complex.
+    // Approximate by sampling nearby heights.
+    const h = this.getHeightAt(x, y, track);
+    const hx = this.getHeightAt(x + 0.1, y, track);
+    const hy = this.getHeightAt(x, y + 0.1, track);
+
+    // Vector 1: (0.1, 0, hx - h)
+    // Vector 2: (0, 0.1, hy - h)
+    // Normal = V2 x V1 (or V1 x V2 depending on handedness)
+    // We want Up to be +Y? No, in Physics Z is up?
+    // Wait, in Physics: x, y are ground plane.
+    // So "Height" is Z? Or "Y" in 3D rendering?
+    // Let's call Height "Z" for math here, but map to Y in renderer.
+    // Physics 2D: x, y. Height is extra dimension "Z".
+
+    // V1 = (0.1, 0, hx-h)
+    // V2 = (0, 0.1, hy-h)
+    // N = (dy*vz - dz*vy, dz*vx - dx*vz, dx*vy - dy*vx)
+    // dx=0.1, dy=0, dz=hx-h
+    // dx=0, dy=0.1, dz=hy-h
+
+    // Nx = 0*(hy-h) - (hy-h)*0.1 = -(hy-h)*0.1 ?? No
+    // Cross Product:
+    // x   y   z
+    // 0.1 0   dz1
+    // 0   0.1 dz2
+
+    // Nx = 0*dz2 - dz1*0.1 = -0.1 * (hx - h) -> Wait this is slope x.
+    // Ny = dz1*0 - 0.1*dz2 = -0.1 * (hy - h)
+    // Nz = 0.1*0.1 - 0*0   = 0.01
+
+    // Normalize
+    const nx = -(hx - h) * 10; // Approx slope
+    const ny = -(hy - h) * 10;
+    const nz = 1;
+
+    const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+    return { x: nx / len, y: ny / len, z: nz / len };
+  }
+
   private updatePlayer(body: PhysicalBody, input: Input, dt: number, track?: Track) {
     // 1. World Transform
     const cosVal = Math.cos(body.angle);
     const sinVal = Math.sin(body.angle);
+
+    // Apply Slope Physics (Gravity)
+    if (track) {
+      // Get normal at center of car
+      const normal = this.getNormalAt(body.x, body.y, track);
+      // Gravity Vector is (0, 0, -g)
+      // We want component parallel to the plane defined by normal.
+      // Force = m * g * sin(slopeAngle)
+      // Or simply project gravity vector onto the plane.
+      // Downwards vector D = (0,0,-1).
+      // Tangent direction T = D - (D . N) * N
+      // (D . N) = -Nz
+      // T = (0,0,-1) - (-Nz) * (Nx, Ny, Nz)
+      // T = (Nx*Nz, Ny*Nz, -1 + Nz*Nz)
+      // We only care about x/y accel.
+      // AccelX = g * Nx * Nz
+      // AccelY = g * Ny * Nz
+
+      // Wait, simpler:
+      // Slide force is proportional to slope.
+      const gravity = 9.81 * 2; // Extra gravity feels better for cars
+      // verify signs:
+      // if slope goes UP in X (Nx < 0), we want force BACK in X (Negative).
+      // My normal Calc: Nx = -(hx-h). If hx > h, Nx is negative. Correct.
+      // So Fx = Nx * gravity?
+      // If flat: Nx=0. Force=0.
+      // If 45 deg up: hx-h=0.1. Nx = -1. Nz = 1? No.
+      // If hx-h=0.1 (over 0.1 step), slope = 1. Normal = (-1, 0, 1). Normalized (-0.7, 0, 0.7).
+      // Force should be -g * sin(45) = -g * 0.7.
+      // With Nx = -0.7. So Fx = Nx * g * (something).
+      // If we simpler assume normal z is close to 1 for shallow slopes:
+      // Fx = Nx * g (approx).
+      // Let's use `normal.x * gravity`.
+
+      body.velocity.x += normal.x * gravity * dt;
+      body.velocity.y += normal.y * gravity * dt;
+    }
 
     // Local Velocity calculation
     // Forward is +X in local space? No, usually in 2D games:
@@ -82,7 +183,9 @@ export class PhysicsEngine {
     const weightPerWheel = (CAR_CFG.mass * 9.81) / 4;
 
     // Total speed for drag
-    const speed = Math.sqrt(body.velocity.x ** 2 + body.velocity.y ** 2);
+    // Total speed for drag
+    // const speed = Math.sqrt(body.velocity.x ** 2 + body.velocity.y ** 2);
+    // (Unused)
 
     wheelOffsets.forEach((w) => {
       // Is this wheel steered?
@@ -97,13 +200,9 @@ export class PhysicsEngine {
       // Surface Traction
       let frictionCoeff = 1.0; // Tarmac default
       if (track) {
-        // Convert world units to tiles. Assuming 1 tile = 10 world units?
-        // Or 1 world unit = 1 tile?
-        // Wait, Track.ts says TRACK_SIZE=30. In games usually 1 tile is some size.
-        // Let's assume 1-to-1 for now based on Schema `x: 0, y: 0`.
-        // If the map is 30x30, coordinates are likely 0..30.
-        const tx = Math.floor(wx);
-        const ty = Math.floor(wy);
+        // Convert world units to tiles.
+        const tx = Math.floor(wx / TILE_SIZE);
+        const ty = Math.floor(wy / TILE_SIZE);
         const tile = track.getTile(tx, ty);
         if (tile) {
           switch (tile.type) {

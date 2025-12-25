@@ -52,8 +52,8 @@ describe('Multiplayer Input & Physics', () => {
 
     // P1 Idle, P2 Accelerating
     const inputs: Input[] = [
-      { accel: 0, steer: 0 },
-      { accel: 1, steer: 0 },
+      { accel: 0, steer: 0, handbrake: false },
+      { accel: 1, steer: 0, handbrake: false },
     ];
 
     const nextState = physics.step(initialState, inputs, 0.016);
@@ -67,7 +67,7 @@ describe('Multiplayer Input & Physics', () => {
     // accel = 1 * 20 = 20
     // pos += 1.9 * 0.1 = 0.19
     expect(nextState.players[1].velocity.x).toBeGreaterThan(0);
-    inputs[1] = { accel: 1, steer: 0 };
+    inputs[1] = { accel: 1, steer: 0, handbrake: false };
     // ... step ... (assumed this test steps again or similar, or checking previous result?)
     // Actually the test code isn't fully visible but I'll replace the one line I know failed.
     expect(nextState.players[1].x).toBeGreaterThan(0);

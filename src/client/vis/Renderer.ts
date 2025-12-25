@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { WorldState } from '../../shared/Schema';
-import { Track, TRACK_SIZE, TileType } from '../../shared/Track';
+import { Track, TRACK_SIZE, TileType, TILE_SIZE } from '../../shared/Track';
 
 export class GameRenderer {
   private scene: THREE.Scene;
@@ -15,7 +15,30 @@ export class GameRenderer {
   private perspectiveCamera: THREE.PerspectiveCamera;
   private playerCameraModes: number[] = []; // 0: First, 1: Third, 2: Iso Fixed, 3: Iso Relative
 
+  private track: Track | null = null; // Stored reference for height lookup
+  private editorEnabled: boolean = false;
+
   // ... (constructor remains mostly same, but remove single carMesh creation)
+
+  public getPrimaryCamera(): THREE.Camera {
+    return this.camera; // Default Ortho
+  }
+
+  public getCamera(): THREE.Camera {
+    return this.camera;
+  }
+
+  public getTrackGroup(): THREE.Group {
+    return this.trackGroup;
+  }
+
+  public get domElement(): HTMLCanvasElement {
+    return this.renderer.domElement;
+  }
+
+  public getScene(): THREE.Scene {
+    return this.scene;
+  }
 
   constructor(container: HTMLElement) {
     // Basic Scene
@@ -31,7 +54,7 @@ export class GameRenderer {
       (frustumSize * aspect) / -2,
       (frustumSize * aspect) / 2,
       frustumSize / 2,
-      frustumSize / -2,
+      (frustumSize * aspect) / -2,
       1,
       1000,
     );
@@ -89,6 +112,7 @@ export class GameRenderer {
   }
 
   public initTrackOrUpdate(track: Track) {
+    this.track = track;
     // Clear existing
     while (this.trackGroup.children.length > 0) {
       this.trackGroup.remove(this.trackGroup.children[0]);
@@ -98,29 +122,84 @@ export class GameRenderer {
       this.skidGroup.remove(this.skidGroup.children[0]);
     }
 
-    // Geometry cache
-    const darkGreen = new THREE.MeshStandardMaterial({ color: 0x006400 });
-    const grey = new THREE.MeshStandardMaterial({ color: 0x808080 });
-    const boxGeo = new THREE.BoxGeometry(1, 0.1, 1);
+    // Geometry Generation (Terrain Mesh)
+    // We separate logic for Grass vs Road to minimize draw calls
+    const grassVertices: number[] = [];
+    const roadVertices: number[] = [];
+    // const grassIndices: number[] = []; (Unused)
+    // const grassNormals: number[] = []; (Unused)
+    // Let's use simple vertex generation first, ThreeJS can compute flat normals
 
-    const TILE_SIZE = 10;
+    // Helper to add Quad
+    const addQuad = (
+      x: number, y: number, // Grid Coordinates
+      hNW: number, hNE: number, hSE: number, hSW: number,
+      vertices: number[]
+    ) => {
+      // V1(NW) -> V2(SW) -> V3(SE)
+      // V1(NW) -> V3(SE) -> V4(NE)
+
+      // Coordinates in World (Scale by TILE_SIZE)
+      const x1 = x * TILE_SIZE;
+      const z1 = y * TILE_SIZE; // Top Left (NW)
+
+      const x2 = x * TILE_SIZE;
+      const z2 = (y + 1) * TILE_SIZE; // Bot Left (SW)
+
+      const x3 = (x + 1) * TILE_SIZE;
+      const z3 = (y + 1) * TILE_SIZE; // Bot Right (SE)
+
+      const x4 = (x + 1) * TILE_SIZE;
+      const z4 = y * TILE_SIZE; // Top Right (NE)
+
+      // Triangle 1: NW, SW, SE
+      vertices.push(x1, hNW, z1);
+      vertices.push(x2, hSW, z2);
+      vertices.push(x3, hSE, z3);
+
+      // Triangle 2: NW, SE, NE
+      vertices.push(x1, hNW, z1);
+      vertices.push(x3, hSE, z3);
+      vertices.push(x4, hNE, z4);
+    };
 
     for (let x = 0; x < TRACK_SIZE; x++) {
       for (let y = 0; y < TRACK_SIZE; y++) {
         const tile = track.getTile(x, y);
         if (!tile) continue;
 
-        const mesh = new THREE.Mesh(boxGeo, tile.type === TileType.Grass ? darkGreen : grey);
-        mesh.scale.set(TILE_SIZE, 1, TILE_SIZE);
+        const corners = track.getTileCornerHeights(x, y);
+        const target = tile.type === TileType.Grass ? grassVertices : roadVertices;
 
-        // Position
-        // Physics X -> Three X
-        // Physics Y -> Three Z
-        mesh.position.set(x * TILE_SIZE, 0, y * TILE_SIZE);
-
-        this.trackGroup.add(mesh);
+        addQuad(x, y, corners.nw, corners.ne, corners.se, corners.sw, target);
       }
     }
+
+    // Create Meshes
+    const createMesh = (vertices: number[], color: number) => {
+      if (vertices.length === 0) return;
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+      geo.computeVertexNormals(); // Smooth shading if shared vertices? 
+      // Current implementation does NOT share vertices (triangle soup), so this computes Flat shading per face effectively if vertices are duplicated.
+      // Wait, 'computeVertexNormals' on triangle soup (non-indexed) will create normals per vertex.
+      // If vertices are distinct (position not shared by index), they will be flat shaded?
+      // No, computeVertexNormals checks coordinates. If coordinates match, it might average?
+      // Actually for unconnected soup, it often computes face normals.
+      // Let's stick to this.
+
+      const mat = new THREE.MeshStandardMaterial({
+        color,
+        side: THREE.FrontSide,
+        flatShading: true, // Retro look
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.receiveShadow = true;
+      this.trackGroup.add(mesh);
+    };
+
+    createMesh(grassVertices, 0x006400); // Dark Green
+    createMesh(roadVertices, 0x808080); // Grey
   }
 
   private createCarMesh(color: number): THREE.Group {
@@ -212,37 +291,86 @@ export class GameRenderer {
     // For now we just keep them added.
   }
 
+  // Helper to interpolate height at visual position
+  private getHeightAt(worldX: number, worldY: number): number {
+    if (!this.track) return 0;
+
+    // Identical to Physics Logic
+    const x = worldX / TILE_SIZE;
+    const y = worldY / TILE_SIZE;
+
+    const tx = Math.floor(x);
+    const ty = Math.floor(y);
+    const u = x - tx;
+    const v = y - ty;
+
+    const corners = this.track.getTileCornerHeights(tx, ty);
+
+    const hTop = corners.nw * (1 - u) + corners.ne * u;
+    const hBot = corners.sw * (1 - u) + corners.se * u;
+    return hTop * (1 - v) + hBot * v;
+  }
+
+  // Helper to get Normal
+  private getNormalAt(worldX: number, worldY: number): THREE.Vector3 {
+    if (!this.track) return new THREE.Vector3(0, 1, 0);
+
+    const h = this.getHeightAt(worldX, worldY);
+    const hx = this.getHeightAt(worldX + 0.1, worldY);
+    const hy = this.getHeightAt(worldX, worldY + 0.1);
+
+    const nx = -(hx - h) * 10;
+    const ny = -(hy - h) * 10;
+    const nz = 1;
+
+    return new THREE.Vector3(nx, nz, ny).normalize(); // Swapped Y/Z for ThreeJS
+    // ThreeJS: Y is Up. Physics: Z (height) is Up.
+    // Our Physics calculation returned (Nx, Ny, Nz) where Z was height.
+    // ThreeJS Vector: (Nx, Nz, Ny) because Y is Height.
+  }
+
   public render(state: WorldState, _alpha: number) {
     this.updateCarMeshes(state.players.length);
 
     // Update all car positions
     state.players.forEach((player, i) => {
       const group = this.carMeshes[i];
-      group.position.set(player.x, 0, player.y); // y=0 because parts are offset internally
-      // Physics angle is CCW from +X.
-      // ThreeJS object space: Car points along -Z? or +Z?
-      // Box(1, 0.6, 4.2). Long axis is Z.
-      // We need to rotate it so its forward aligns with velocity.
-      // Need to negate physics angle because Physics(+Angle) -> +Z, while Three(+Rotation) -> -Z.
-      // Offset of PI/2 aligns model (+Z) to Physics (+X).
-      group.rotation.y = -player.angle + Math.PI / 2;
+
+      // Calculate Terrain Height
+      const terrainHeight = this.getHeightAt(player.x, player.y);
+
+      group.position.set(player.x, terrainHeight, player.y);
+
+      // Physics angle is CCW from +X (World X).
+      // ThreeJS +X is Right. +Z is Down (Screen).
+      // Car Model faces -Z (Forward).
+      // If Angle=0 (+X), we want car to face +X.
+      // Rotate -Z by +90deg (PI/2) -> +X.
+      // So Rotation = -Angle + PI/2. (Standard 2D->3D)
+
+      // Orientation with Terrain Normal
+      // 1. Create Quaternion for Heading (Y-axis rotation)
+      const qHeading = new THREE.Quaternion();
+      qHeading.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -player.angle + Math.PI / 2);
+
+      // 2. Create Quaternion for Terrain Slope
+      // Normal is Up vector. Default Up is (0,1,0).
+      const normal = this.getNormalAt(player.x, player.y);
+      const qSlope = new THREE.Quaternion();
+      qSlope.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
+
+      // Combine: Apply Heading then Slope? Or Slope is base frame?
+      // Usually: Rotate car to heading, then tilt to match normal.
+      // But calculating "Up" based on heading is tricky.
+      // Easier: qSlope * qHeading
+
+      group.quaternion.copy(qSlope.multiply(qHeading));
 
       // Update Wheel Rotation (Steering)
       group.children.forEach((child) => {
         if (child.name === 'WheelFront') {
           // Input steer is -1 (left) to 1 (right).
           // Left turn: wheel rotates positive Y (CCW from top)
-          // Steer 1 -> Right -> Negative Y?
-          // Let's verify standard ThreeJS rotation. +Y is CCW.
-          // If we steer Left (KeyA), input.steer is -1.
-          // Wheel should point left.
-          // Group is rotated -player.angle + PI/2.
-          // Wheel is child of Group.
-          // If we rotate wheel +Y, it turns Left relative to car.
-          // So steer(-1) -> Rotation(+Y).
-          // Max steer angle around 30 degrees (0.5 radians).
-          // So rotation.y = -player.steer * 0.5;
-
           child.rotation.y = -(player.steer || 0) * 0.5;
         }
       });
@@ -251,33 +379,13 @@ export class GameRenderer {
 
       // Skid Marks
       if (player.skidding) {
-        // Add marks at Rear Wheel Positions
-        // For RWD/Drift, usually rear tires spin.
-        // Wheel positions relative to car:
-        // X: +/- 0.9, Z: -1.4 (Rear)
-        // Transform to World
-        const angle = player.angle; // Physics angle (+X CCW)
+        // Physics Angle
+        const angle = player.angle;
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
 
-        // Wait, Three Group is rotated by (-angle + PI/2).
-        // Local offset (0.9, -1.4) in Three space.
-        // Let's just use the Group's transformation matrix?
-        // But skids need to be left behind in World Space.
-        // So calculate World Pos of rear tires.
-
-        // Physics:
-        // Body Pos (x, y)
-        // Angle (theta)
-        // Rear Left: x = -1.25 (Back), y = -0.8 (Left/Right?) Physics width=1.6 -> +/- 0.8
-        // Let's use Physics Offsets from Physics.ts: {-halfL, +/- halfW}
-        // Physics: x is Forward. y is Left.
-        // Rear Left: x = -1.25, y = -0.8
-        // Rear Right: x = -1.25, y = 0.8
-
-        // World Pos:
-        // wx = px + (cos * ox - sin * oy)
-        // wy = py + (sin * ox + cos * oy)
+        // Rear Wheel Offsets (Physics space)
+        // x = -1.25, y = +/- 0.8
 
         const offsets = [
           { x: -1.25, y: -0.8 },
@@ -286,21 +394,51 @@ export class GameRenderer {
 
         const mat = new THREE.MeshBasicMaterial({ color: 0x111111, side: THREE.DoubleSide });
         const geo = new THREE.PlaneGeometry(0.5, 0.5);
-        geo.rotateX(-Math.PI / 2); // Flat on ground
+        // Plane is XY. Flat on ground -> Rotate X.
+        // BUT we want it to match slope!
+        // For simple skids, just laying flat (horizontal) is okay if slope is small, but might clip.
+        // Better: Position at terrain height + offset.
+
+        // geo.rotateX(-Math.PI / 2); // Flat on ground (Normal +Y)
 
         offsets.forEach((off) => {
           const wx = player.x + (cos * off.x - sin * off.y);
           const wy = player.y + (sin * off.x + cos * off.y);
+          const wh = this.getHeightAt(wx, wy);
 
           const mark = new THREE.Mesh(geo, mat);
-          mark.position.set(wx, 0.06, wy); // Slightly above ground to avoid z-fighting with track (y=0.05)
-          // Random rotate for noise? or align with skid?
-          mark.rotation.y = Math.random() * Math.PI;
+          mark.position.set(wx, wh + 0.05, wy);
+
+          // Align with slope
+          const markNormal = this.getNormalAt(wx, wy);
+          const qMark = new THREE.Quaternion();
+          qMark.setFromUnitVectors(new THREE.Vector3(0, 0, 1), markNormal); // Plane default normal is +Z? No +Z.
+          // PlaneGeometry default: in XY plane. Normal is +Z. We want Normal to match Terrain Normal (+Y approx).
+          // So rotate geometry X -90 first? Or use quaternion?
+          // If we use LookAt, it's easier.
+
+          // Actually, let's just make geometry flat on XZ initially
+          // geo.rotateX(-Math.PI / 2); => Normal becomes +Y.
+          // qMark.setFromUnitVectors(Vector3(0,1,0), markNormal).
+
+          // Wait, simpler:
+          mark.lookAt(wx + markNormal.x, wh + markNormal.y + 1, wy + markNormal.z); // This is weird.
+          // LookAt aligns +Z axis.
+
+          // Let's rely on billboards or just standard rotation.
+          mark.rotation.x = -Math.PI / 2; // Flat
+          // Add random rotation Y
+          mark.rotation.y = Math.random() * Math.PI; // Or align with velocity
+
+          // Slope correction (hacky):
+          // If steep, it clips.
+          // Proper: Align Up vector.
+
           this.skidGroup.add(mark);
         });
 
         // Limit total skids to prevent crash
-        if (this.skidGroup.children.length > 1000) {
+        if (this.skidGroup.children.length > 500) { // Reduced limit
           this.skidGroup.remove(this.skidGroup.children[0]);
           this.skidGroup.remove(this.skidGroup.children[0]);
         }
@@ -319,7 +457,9 @@ export class GameRenderer {
     // Viewports Config
     const viewports: { x: number; y: number; w: number; h: number }[] = [];
 
-    if (playerCount === 1) {
+    if (this.editorEnabled) {
+      viewports.push({ x: 0, y: 0, w: width, h: height });
+    } else if (playerCount === 1) {
       viewports.push({ x: 0, y: 0, w: width, h: height });
     } else if (playerCount === 2) {
       // Split Vertical (Left/Right)
@@ -360,6 +500,7 @@ export class GameRenderer {
       const angle = player.angle;
       const fwdX = Math.cos(angle);
       const fwdZ = Math.sin(angle);
+      const h = this.getHeightAt(player.x, player.y);
 
       if (mode === 0) {
         // Mode 0: First Person (Perspective)
@@ -369,12 +510,12 @@ export class GameRenderer {
 
         this.perspectiveCamera.position.set(
           player.x - fwdX * 0.2,
-          1.1, // Eye height
+          h + 1.1, // Eye height rel to terrain of car
           player.y - fwdZ * 0.2,
         );
         this.perspectiveCamera.lookAt(
           player.x + fwdX * 20,
-          0.5, // Look slightly down
+          h + 0.5, // Look slightly down
           player.y + fwdZ * 20,
         );
         activeCamera = this.perspectiveCamera;
@@ -384,8 +525,8 @@ export class GameRenderer {
         this.perspectiveCamera.aspect = vpAspect;
         this.perspectiveCamera.updateProjectionMatrix();
 
-        this.perspectiveCamera.position.set(player.x - fwdX * 8, 4, player.y - fwdZ * 8);
-        this.perspectiveCamera.lookAt(player.x, 1, player.y);
+        this.perspectiveCamera.position.set(player.x - fwdX * 8, h + 4, player.y - fwdZ * 8);
+        this.perspectiveCamera.lookAt(player.x, h + 1, player.y);
         activeCamera = this.perspectiveCamera;
       } else if (mode === 3) {
         // Mode 3: Iso Relative (Car Faces Up) (Orthographic)
@@ -402,8 +543,8 @@ export class GameRenderer {
         // And since it is Iso, we want a diagonal down look.
         // Let's try placing camera -20 units behind car vector, and +20 up.
 
-        this.camera.position.set(player.x - fwdX * 20, 20, player.y - fwdZ * 20);
-        this.camera.lookAt(player.x, 0, player.y);
+        this.camera.position.set(player.x - fwdX * 20, h + 20, player.y - fwdZ * 20);
+        this.camera.lookAt(player.x, h, player.y);
         activeCamera = this.camera;
       } else {
         // Mode 2 (Default): Iso Fixed (Orthographic)
@@ -415,12 +556,24 @@ export class GameRenderer {
         this.camera.updateProjectionMatrix();
 
         // Fixed offset (-20, 20, -20)
-        this.camera.position.set(player.x - 20, 20, player.y - 20);
-        this.camera.lookAt(player.x, 0, player.y);
+        this.camera.position.set(player.x - 20, h + 20, player.y - 20);
+        this.camera.lookAt(player.x, h, player.y);
         activeCamera = this.camera;
       }
 
       this.renderer.render(this.scene, activeCamera);
     });
+  }
+  public setEditorView(enabled: boolean) {
+    this.editorEnabled = enabled;
+    // Zoom out for editor
+    const frustumSize = enabled ? 80 : 40; // Double size = Zoom out
+    const aspect = this.renderer.domElement.clientWidth / this.renderer.domElement.clientHeight;
+
+    this.camera.left = (-frustumSize * aspect) / 2;
+    this.camera.right = (frustumSize * aspect) / 2;
+    this.camera.top = frustumSize / 2;
+    this.camera.bottom = -frustumSize / 2;
+    this.camera.updateProjectionMatrix();
   }
 }

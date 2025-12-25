@@ -160,4 +160,36 @@ export class UIManager {
     const screens = this.container.querySelectorAll('.screen');
     screens.forEach((s) => s.remove());
   }
+
+  // Editor HUD
+  private editorHud: HTMLElement | null = null;
+
+  public updateEditorStatus(active: boolean, toolName: string) {
+    if (!active) {
+      if (this.editorHud) {
+        this.editorHud.style.display = 'none';
+      }
+      return;
+    }
+
+    if (!this.editorHud) {
+      this.editorHud = document.createElement('div');
+      this.editorHud.style.position = 'absolute';
+      this.editorHud.style.top = '10px';
+      this.editorHud.style.left = '50%';
+      this.editorHud.style.transform = 'translateX(-50%)';
+      this.editorHud.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+      this.editorHud.style.color = 'white';
+      this.editorHud.style.padding = '10px 20px';
+      this.editorHud.style.borderRadius = '20px';
+      this.editorHud.style.fontFamily = 'monospace';
+      this.editorHud.style.fontSize = '16px';
+      this.editorHud.style.pointerEvents = 'none';
+      this.editorHud.style.zIndex = '1000';
+      this.container.appendChild(this.editorHud);
+    }
+
+    this.editorHud.style.display = 'block';
+    this.editorHud.textContent = `EDITOR MODE | TOOL: ${toolName}`;
+  }
 }

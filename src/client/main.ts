@@ -12,6 +12,7 @@ import { interpolateState } from '../shared/Schema';
 import { GameServer } from '../server/GameServer';
 import { ClientMessageType, ServerMessageType } from '../shared/network/Protocol';
 import type { LocalChannel } from '../shared/network/LocalTransport';
+import { Editor, EditorTool } from './Editor';
 
 // Application State
 const AppState = {
@@ -31,15 +32,7 @@ let track = new Track();
 const inputManager = new InputManager();
 const settingsManager = new SettingsManager(new LocalStorageStore());
 
-// Game Server (Local)
-let server: GameServer | null = null;
-const clients: LocalChannel[] = []; // Operations for each local player
-
-// Game Simulation State (Client View)
-let simState: SimState | null = null;
-const serverUpdates: Array<{ tick: number; time: number; state: SimState }> = [];
-
-// UI Manager
+// UI Manager (Moved up for injection)
 const ui = new UIManager(
   document.body,
   settingsManager,
@@ -53,6 +46,21 @@ const ui = new UIManager(
     }
   },
 );
+
+// Editor Init
+const editor = new Editor(track, renderer, renderer.domElement, ui);
+editor.setScene(renderer.getScene());
+
+// Game Server (Local)
+let server: GameServer | null = null;
+const clients: LocalChannel[] = []; // Operations for each local player
+
+// Game Simulation State (Client View)
+let simState: SimState | null = null;
+const serverUpdates: Array<{ tick: number; time: number; state: SimState }> = [];
+
+// UI Manager (Already Initialized Above)
+
 
 // Initialization
 void (async () => {
@@ -155,6 +163,7 @@ function startGame(settings: GameSettings, overrideTickRate: number = 60) {
     track.setTile(15, i, TileType.Road);
   }
   renderer.initTrackOrUpdate(track);
+  editor.setTrack(track);
 
   // Initial Positions - Server handles this
   // We just wait for state
@@ -166,6 +175,7 @@ function startGame(settings: GameSettings, overrideTickRate: number = 60) {
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Escape') {
     if (appState === AppState.PLAYING) {
+      editor.setActive(false); // Close editor if open
       appState = AppState.PAUSED;
       ui.showOptionsScreen(
         () => {
@@ -186,50 +196,81 @@ window.addEventListener('keydown', (e) => {
     }
   }
 
-  // Camera Switching
+  // Editor Toggle
+  if (e.code === 'KeyE') {
+    editor.setActive(!editor.isActive());
+  }
+
+  // Camera vs Editor Switching
   if (appState === AppState.PLAYING) {
-    if (e.code === 'Digit1') renderer.cycleCameraMode(0);
-    if (e.code === 'Digit2') renderer.cycleCameraMode(1);
-    if (e.code === 'Digit3') renderer.cycleCameraMode(2);
-    if (e.code === 'Digit4') renderer.cycleCameraMode(3);
+    if (editor.isActive()) {
+      // Editor Tools
+      if (e.code === 'Digit1') editor.setTool(EditorTool.Raise);
+      if (e.code === 'Digit2') editor.setTool(EditorTool.Lower);
+      if (e.code === 'Digit3') editor.setTool(EditorTool.Flatten);
+    } else {
+      // Camera
+      if (e.code === 'Digit1') renderer.cycleCameraMode(0);
+      if (e.code === 'Digit2') renderer.cycleCameraMode(1);
+      if (e.code === 'Digit3') renderer.cycleCameraMode(2);
+      if (e.code === 'Digit4') renderer.cycleCameraMode(3);
+    }
   }
 });
+
+// Editor Mouse Input
+window.addEventListener('mousemove', (e) => {
+  if (appState === AppState.PLAYING) {
+    editor.onMouseMove(e);
+  }
+});
+window.addEventListener('mousedown', (_e) => {
+  if (appState === AppState.PLAYING) {
+    if (editor.isActive()) editor.onMouseDown();
+  }
+});
+
 
 // Game Loop
 const loop = new GameLoop(
   (dt) => {
-    if (appState === AppState.PLAYING && simState) {
-      inputManager.update();
+    if (appState === AppState.PLAYING) {
+      if (editor.isActive()) {
+        // Editor Logic
+        editor.update(dt);
+      } else if (simState) {
+        inputManager.update();
 
-      // Collect inputs for each local player
-      // For now, simpler case: assuming 1 local player for prediction or just predicting all
-      // We need to run physics locally for "Predicted State"
+        // Collect inputs for each local player
+        // For now, simpler case: assuming 1 local player for prediction or just predicting all
+        // We need to run physics locally for "Predicted State"
 
-      // 1. Send inputs to server
-      clients.forEach((client, i) => {
-        const input = inputManager.getInput(i);
-        client.send({
-          type: ClientMessageType.INPUT,
-          payload: input,
+        // 1. Send inputs to server
+        clients.forEach((client, i) => {
+          const input = inputManager.getInput(i);
+          client.send({
+            type: ClientMessageType.INPUT,
+            payload: input,
+          });
         });
-      });
 
-      // 2. Client-Side Prediction
-      // We run the SAME physics engine locally on our current state
-      // This makes the game feel responsive (60fps) even if server is 10hz
-      // In a full implementation, we would re-simulate from the last confirmed server state
-      // if we drifted (Server Reconciliation).
-      // For this step, we just run forward.
-      // When Server 'STATE' arrives (in listeners above), it overwrites simState (Naive Reconciliation).
+        // 2. Client-Side Prediction
+        // We run the SAME physics engine locally on our current state
+        // This makes the game feel responsive (60fps) even if server is 10hz
+        // In a full implementation, we would re-simulate from the last confirmed server state
+        // if we drifted (Server Reconciliation).
+        // For this step, we just run forward.
+        // When Server 'STATE' arrives (in listeners above), it overwrites simState (Naive Reconciliation).
 
-      const inputs = simState.players.map((_, i) => inputManager.getInput(i));
-      // We need a local physics engine instance if we want to separate it from "server" logic
-      // but here we just import the class. Ideally we instantiated one.
-      // We cannot use the 'physics' var if we commented it out?
-      // Let's re-instantiate it or uncomment it.
-      // Since we commented it out globally, let's just make a local one or use a singleton?
-      // Better to have one at top level.
-      simState = physics.step(simState, inputs, dt, track);
+        const inputs = simState.players.map((_, i) => inputManager.getInput(i));
+        // We need a local physics engine instance if we want to separate it from "server" logic
+        // but here we just import the class. Ideally we instantiated one.
+        // We cannot use the 'physics' var if we commented it out?
+        // Let's re-instantiate it or uncomment it.
+        // Since we commented it out globally, let's just make a local one or use a singleton?
+        // Better to have one at top level.
+        simState = physics.step(simState, inputs, dt, track);
+      }
     }
   },
   (alpha) => {

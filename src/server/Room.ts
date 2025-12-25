@@ -51,7 +51,7 @@ export class Room {
 
     this.gameLoop = new GameLoop(
       (dt) => this.update(dt),
-      () => {}, // No render on server
+      () => { }, // No render on server
       this.tickRate, // Target FPS/TPS
     );
     this.gameLoop.start();
@@ -78,6 +78,8 @@ export class Room {
         velocity: { x: 0, y: 0 },
         angle: 0,
         angularVelocity: 0,
+        steer: 0,
+        skidding: false,
       });
     }
     // Current Schema for player doesn't have ID, relies on index.
@@ -88,7 +90,7 @@ export class Room {
     const client: Client = {
       id,
       transport,
-      input: { accel: 0, steer: 0 },
+      input: { accel: 0, steer: 0, handbrake: false },
     };
 
     this.clients.set(id, client);
@@ -132,7 +134,7 @@ export class Room {
       // Ideally Player schema should have ownerID.
       // Assuming index == clientId for now (Fragile!)
       const client = this.clients.get(index);
-      return client ? client.input : { accel: 0, steer: 0 };
+      return client ? client.input : { accel: 0, steer: 0, handbrake: false };
     });
 
     this.state = this.physics.step(this.state, inputs, dt, this.track);
