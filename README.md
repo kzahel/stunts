@@ -1,5 +1,7 @@
 # Stunts Remake Engine - Core Design & Requirements
 
+**[Play Online](https://kyle.graehl.org/stunts)**
+
 This document outlines the architectural pillars for the Stunts browser remake. Future development must strictly adhere to these constraints to ensure robust support for replays, ghosts, and multiplayer.
 
 ## 1. Core Pillars
