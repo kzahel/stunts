@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { NetworkTransport } from './Transport';
 
 export class LocalChannel implements NetworkTransport {
@@ -29,6 +30,7 @@ export class LocalChannel implements NetworkTransport {
       return;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const payload = JSON.parse(JSON.stringify(data)); // Simulate serialization
 
     if (this.latency > 0) {
@@ -52,6 +54,7 @@ export class LocalChannel implements NetworkTransport {
     this.receiveCallback = callback;
     // Flush buffer
     while (this.messageBuffer.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const data = this.messageBuffer.shift();
       callback(data);
     }

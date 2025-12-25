@@ -171,21 +171,24 @@ export class Track {
     }
   }
 
-  public serialize(): any {
+  public serialize(): SerializedTrack {
     return {
       tiles: this.tiles,
       heightMap: Array.from(this.heightMap),
     };
   }
 
-  public deserialize(data: any) {
+  public deserialize(data: SerializedTrack) {
     if (data.tiles) {
-      // Deep copy or assign?
-      // Type safety is minimal here for validation
       this.tiles = data.tiles;
     }
     if (data.heightMap && Array.isArray(data.heightMap)) {
       this.heightMap = new Float32Array(data.heightMap);
     }
   }
+}
+
+export interface SerializedTrack {
+  tiles: TrackTile[][];
+  heightMap: number[];
 }

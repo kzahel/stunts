@@ -5,7 +5,15 @@ import { createInitialState } from '../shared/Schema';
 import type { WorldState, Input } from '../shared/Schema';
 import type { NetworkTransport } from '../shared/network/Transport';
 import { ClientMessageType, ServerMessageType } from '../shared/network/Protocol';
-import type { InputMessage, WelcomeMessage, StateMessage } from '../shared/network/Protocol';
+import type {
+  ClientMessage,
+  ServerMessage,
+  InputMessage,
+  WelcomeMessage,
+  StateMessage,
+  MapUpdateMessage,
+  MapSyncMessage,
+} from '../shared/network/Protocol';
 
 interface Client {
   id: number;
@@ -114,9 +122,9 @@ export class Room {
     transport.send(welcome);
   }
 
-  private handleMessage(clientId: number, data: any) {
+  private handleMessage(clientId: number, data: unknown) {
     // TODO: Validate data structure
-    const msg = data as { type: string; payload: any };
+    const msg = data as ClientMessage;
 
     if (msg.type === ClientMessageType.INPUT) {
       const inputMsg = msg as InputMessage;
@@ -128,8 +136,7 @@ export class Room {
 
     if (msg.type === ClientMessageType.MAP_UPDATE) {
       // Apply map update
-      const mapMsg = msg as { type: string; payload: any }; // Type assertion
-      // Ideally validate
+      const mapMsg = msg as MapUpdateMessage;
 
       // Apply to server track
       this.track.deserialize(mapMsg.payload);
@@ -139,10 +146,11 @@ export class Room {
       // Ideally we broadcast a MAP_SYNC or relay the update.
       // Let's relay.
       // Note: We should probably only allow "Host" to update map, but for now any client.
-      this.broadcast({
+      const syncMsg: MapSyncMessage = {
         type: ServerMessageType.MAP_SYNC,
         payload: mapMsg.payload,
-      });
+      };
+      this.broadcast(syncMsg);
     }
   }
 
@@ -173,7 +181,7 @@ export class Room {
     this.broadcast(updateMsg);
   }
 
-  private broadcast(msg: any) {
+  private broadcast(msg: ServerMessage) {
     this.clients.forEach((client) => {
       client.transport.send(msg);
     });

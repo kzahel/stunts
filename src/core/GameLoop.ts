@@ -4,6 +4,7 @@ export class GameLoop {
   private running: boolean = false;
   private rafId: number | null = null;
   private readonly timeStep: number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private timeoutId: any = null;
 
   private update: (dt: number) => void;
@@ -51,6 +52,7 @@ export class GameLoop {
       this.rafId = null;
     }
     if (this.timeoutId !== null) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
       clearTimeout(this.timeoutId);
       this.timeoutId = null;
     }

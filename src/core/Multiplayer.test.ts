@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-globals */
 import { expect, test, describe } from 'vitest';
 import { InputManager } from '../client/InputManager';
 import { PhysicsEngine } from './Physics';

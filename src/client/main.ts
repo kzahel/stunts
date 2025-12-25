@@ -11,6 +11,12 @@ import { UIManager } from './vis/UI';
 import { interpolateState } from '../shared/Schema';
 import { GameServer } from '../server/GameServer';
 import { ClientMessageType, ServerMessageType } from '../shared/network/Protocol';
+import type {
+  ServerMessage,
+  WelcomeMessage,
+  StateMessage,
+  MapSyncMessage,
+} from '../shared/network/Protocol';
 import type { LocalChannel } from '../shared/network/LocalTransport';
 import { Editor, EditorTool } from './Editor';
 
@@ -130,10 +136,13 @@ function startGame(settings: GameSettings, overrideTickRate: number = 60) {
     client.send({ type: ClientMessageType.JOIN, payload: {} });
 
     // Listen for updates
-    client.onReceive((msg) => {
+    client.onReceive((unsafeMsg: unknown) => {
+      const msg = unsafeMsg as ServerMessage;
+
       if (msg.type === ServerMessageType.WELCOME) {
-        const payload = msg.payload; // Type assertion needed until Protocol is stricter
-        console.log(`Player ${i} Joined. ID: ${payload.id}`);
+        const welcomeMsg = msg as WelcomeMessage;
+        const payload = welcomeMsg.payload;
+        console.log(`Player ${i} Joined. ID: ${payload.playerId}`);
         // If we are player 1 (index 0), we might want to capture initial state
         if (i === 0 && payload.initialState) {
           simState = payload.initialState;
@@ -141,7 +150,8 @@ function startGame(settings: GameSettings, overrideTickRate: number = 60) {
       }
 
       if (msg.type === ServerMessageType.MAP_SYNC) {
-        const payload = msg.payload as any;
+        const mapMsg = msg as MapSyncMessage;
+        const payload = mapMsg.payload;
         track.deserialize(payload);
         renderer.initTrackOrUpdate(track);
         // If editor needs refresh?
@@ -150,7 +160,8 @@ function startGame(settings: GameSettings, overrideTickRate: number = 60) {
       if (msg.type === ServerMessageType.STATE) {
         // "Naive" Reconciliation: Overwrite local state with server state
         // This is what snaps the local player.
-        const serverState = msg.payload as SimState;
+        const stateMsg = msg as StateMessage;
+        const serverState = stateMsg.payload;
 
         // 1. Update Prediction (Snap)
         if (i === 0) {

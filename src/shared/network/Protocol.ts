@@ -1,4 +1,5 @@
 import type { Input, WorldState } from '../Schema';
+import type { SerializedTrack } from '../Track';
 
 export const ClientMessageType = {
   JOIN: 'JOIN',
@@ -28,24 +29,7 @@ export interface InputMessage extends ClientMessage {
 
 export interface MapUpdateMessage extends ClientMessage {
   type: typeof ClientMessageType.MAP_UPDATE;
-  payload: {
-    // Simple serialization of track? Or just grid height array?
-    // Let's send the whole grid for simplicity now
-    tiles: {
-      x: number;
-      y: number;
-      type: number;
-      height: number;
-      corners: { nw: number; ne: number; sw: number; se: number };
-    }[];
-    // Or simpler: Just a list of modifications?
-    // "Full Sync" is safest for now.
-    // Let's assume payload is whatever Track.serialize() produces?
-    // For now: Custom simplified format
-    width: number;
-    height: number;
-    data: any[];
-  };
+  payload: SerializedTrack;
 }
 
 export const ServerMessageType = {
@@ -73,4 +57,9 @@ export interface WelcomeMessage extends ServerMessage {
 export interface StateMessage extends ServerMessage {
   type: typeof ServerMessageType.STATE;
   payload: WorldState;
+}
+
+export interface MapSyncMessage extends ServerMessage {
+  type: typeof ServerMessageType.MAP_SYNC;
+  payload: SerializedTrack;
 }

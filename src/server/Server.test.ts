@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { GameServer } from './GameServer';
 import { ClientMessageType, ServerMessageType as SMT } from '../shared/network/Protocol';
-import type { WelcomeMessage, StateMessage } from '../shared/network/Protocol';
+import type { WelcomeMessage, StateMessage, ServerMessage } from '../shared/network/Protocol';
 
 describe('GameServer Integration', () => {
   it('allows a local client to connect and receive updates', async () => {
@@ -13,7 +13,8 @@ describe('GameServer Integration', () => {
 
     // Promise to wait for welcome
     const welcomePromise = new Promise<void>((resolve) => {
-      client.onReceive((data) => {
+      client.onReceive((unsafeData: unknown) => {
+        const data = unsafeData as ServerMessage;
         if (data.type === SMT.WELCOME) {
           const msg = data as WelcomeMessage;
           playerId = msg.payload.playerId;
