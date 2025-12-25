@@ -1,5 +1,5 @@
-import { SettingsManager, ControlType } from '../engine/Settings';
-import type { GameSettings } from '../engine/Settings';
+import { SettingsManager, ControlType } from '../../shared/Settings';
+import type { GameSettings } from '../../shared/Settings';
 
 export class UIManager {
   private container: HTMLElement;

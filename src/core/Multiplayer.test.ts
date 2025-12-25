@@ -1,8 +1,8 @@
 import { expect, test, describe } from 'vitest';
-import { InputManager } from './Input';
+import { InputManager } from '../client/InputManager';
 import { PhysicsEngine } from './Physics';
-import { createInitialState } from './Schema';
-import { ControlType } from './Settings';
+import { createInitialState } from '../shared/Schema';
+import { ControlType } from '../shared/Settings';
 
 // Note: jsdom environment is configured in vite.config.ts, so window/document are available globally.
 

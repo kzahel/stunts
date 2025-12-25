@@ -1,4 +1,4 @@
-import type { WorldState, Input } from './Schema';
+import type { WorldState, Input } from '../shared/Schema';
 
 export class PhysicsEngine {
   public step(state: WorldState, inputs: Input[], dt: number): WorldState {

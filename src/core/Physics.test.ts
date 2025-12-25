@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { PhysicsEngine } from './Physics';
-import { createInitialState } from './Schema';
-import type { Input } from './Schema';
+import { createInitialState } from '../shared/Schema';
+import type { Input } from '../shared/Schema';
 
 describe('PhysicsEngine', () => {
   it('is deterministic', () => {

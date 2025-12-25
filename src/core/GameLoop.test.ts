@@ -40,9 +40,9 @@ describe('GameLoop', () => {
     loop.tick(1110);
 
     expect(updateFn).toHaveBeenCalledTimes(1);
-    expect(renderFn).toHaveBeenCalledTimes(2);
+    expect(renderFn).toHaveBeenCalledTimes(3);
 
-    const lastRenderCall = renderFn.mock.calls[1];
+    const lastRenderCall = renderFn.mock.calls[2];
     expect(lastRenderCall[0]).toBeCloseTo(0.1, 5);
   });
 });

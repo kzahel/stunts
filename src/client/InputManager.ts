@@ -1,6 +1,6 @@
-import type { Input } from './Schema';
-import { ControlType } from './Settings';
-import type { PlayerControlConfig } from './Settings';
+import type { Input } from '../shared/Schema';
+import { ControlType } from '../shared/Settings';
+import type { PlayerControlConfig } from '../shared/Settings';
 
 export class InputManager {
   private keysPressed = new Set<string>();

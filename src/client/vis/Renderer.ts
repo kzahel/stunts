@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import type { WorldState } from '../engine/Schema';
-import { Track, TRACK_SIZE, TileType } from '../engine/Track';
+import type { WorldState } from '../../shared/Schema';
+import { Track, TRACK_SIZE, TileType } from '../../shared/Track';
 
 export class GameRenderer {
   private scene: THREE.Scene;

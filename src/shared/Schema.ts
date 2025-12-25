@@ -9,6 +9,7 @@ export interface Vector2 {
 }
 
 export interface PhysicalBody {
+  id?: number; // Player ID (optional for now as we transition)
   position: Vector2;
   velocity: Vector2;
   angle: number; // radians

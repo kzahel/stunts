@@ -46,4 +46,35 @@ export default tseslint.config(
       '@typescript-eslint/no-var-requires': 'off',
     },
   },
+  // 4. Server/Core isolation (No DOM)
+  {
+    files: ['src/core/**/*.ts', 'src/server/**/*.ts', 'src/shared/**/*.ts'],
+    languageOptions: {
+      globals: {
+        // Explicitly disable browser globals that might be auto-detected or merged
+        window: false,
+        document: false,
+        navigator: false,
+        HTMLElement: false,
+        console: true, // We allow console
+      },
+    },
+    rules: {
+      'no-restricted-globals': [
+        'error',
+        {
+          name: 'window',
+          message: 'Do not use window in core/server code. This code must run in Node.js.',
+        },
+        {
+          name: 'document',
+          message: 'Do not use document in core/server code. This code must run in Node.js.',
+        },
+        {
+          name: 'navigator',
+          message: 'Do not use navigator in core/server code. This code must run in Node.js.',
+        },
+      ],
+    },
+  },
 );
