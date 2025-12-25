@@ -232,6 +232,20 @@ export class GameRenderer {
           uMax = 1.0;
           vMax = 1.0;
           break;
+        case TileType.Snow:
+          // Col 3, Bot (0.75..1.0, 0..0.5)
+          uMin = 0.75;
+          vMin = 0;
+          uMax = 1.0;
+          vMax = 0.5;
+          break;
+        case TileType.Water:
+          // Col 2, Bot (0.5..0.75, 0..0.5)
+          uMin = 0.5;
+          vMin = 0;
+          uMax = 0.75;
+          vMax = 0.5;
+          break;
         default: // Grass default
           uMin = 0;
           vMin = 0.5;

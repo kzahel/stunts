@@ -113,6 +113,10 @@ export class PhysicsEngine {
         return 2.5;
       case TileType.Finish:
         return 2.5;
+      case TileType.Snow:
+        return 0.2; // Very slippery
+      case TileType.Water:
+        return 0.1; // Almost no grip
       default:
         return 0.5;
     }

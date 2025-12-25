@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Track, TILE_SIZE, HEIGHT_STEP, TileType } from '../shared/Track';
+import { Track, TILE_SIZE, HEIGHT_STEP, TileType, MAX_HEIGHT, MIN_HEIGHT } from '../shared/Track';
 import { GameRenderer } from './vis/Renderer';
 import { UIManager } from './vis/UI';
 
@@ -19,6 +19,8 @@ export const PALETTE_ORDER: TileType[] = [
   TileType.Grass,
   TileType.Dirt,
   TileType.Sand,
+  TileType.Water,
+  TileType.Snow,
 ];
 
 export class Editor {
@@ -131,6 +133,8 @@ export class Editor {
         if (this.selectedTileType === TileType.Grass) tileName = 'GRASS';
         if (this.selectedTileType === TileType.Dirt) tileName = 'DIRT';
         if (this.selectedTileType === TileType.Sand) tileName = 'SAND';
+        if (this.selectedTileType === TileType.Water) tileName = 'WATER';
+        if (this.selectedTileType === TileType.Snow) tileName = 'SNOW';
         name = `PLACE [${tileName}] (3)`;
         break;
       }
@@ -142,6 +146,8 @@ export class Editor {
       if (this.selectedTileType === TileType.Grass) tileName = 'GRASS';
       if (this.selectedTileType === TileType.Dirt) tileName = 'DIRT';
       if (this.selectedTileType === TileType.Sand) tileName = 'SAND';
+      if (this.selectedTileType === TileType.Water) tileName = 'WATER';
+      if (this.selectedTileType === TileType.Snow) tileName = 'SNOW';
       name += ` | Palette: < ${tileName} >`;
     }
 
@@ -245,8 +251,10 @@ export class Editor {
       // Flatten to top
       corners.forEach((c) => this.track.setVertexHeight(c.x, c.y, maxHeight));
     } else {
-      // Already flat, raise all
-      corners.forEach((c) => this.track.setVertexHeight(c.x, c.y, maxHeight + HEIGHT_STEP));
+      // Already flat, raise all if below MAX
+      if (maxHeight < MAX_HEIGHT) {
+        corners.forEach((c) => this.track.setVertexHeight(c.x, c.y, maxHeight + HEIGHT_STEP));
+      }
     }
 
     // Propagate
@@ -278,8 +286,10 @@ export class Editor {
       // Flatten to bottom
       corners.forEach((c) => this.track.setVertexHeight(c.x, c.y, minHeight));
     } else {
-      // Lower all
-      corners.forEach((c) => this.track.setVertexHeight(c.x, c.y, minHeight - HEIGHT_STEP));
+      // Lower all if above MIN
+      if (minHeight > MIN_HEIGHT) {
+        corners.forEach((c) => this.track.setVertexHeight(c.x, c.y, minHeight - HEIGHT_STEP));
+      }
     }
 
     corners.forEach((c) => this.track.enforceSlopeConstraints(c.x, c.y));

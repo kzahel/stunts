@@ -10,7 +10,15 @@ export const TileType = {
   Finish: 5,
   Dirt: 6,
   Sand: 7,
+  Water: 8,
+  Snow: 9,
 } as const;
+
+export const MAX_HEIGHT_TILES = 2;
+export const MIN_HEIGHT_TILES = -2;
+export const MAX_HEIGHT = MAX_HEIGHT_TILES * TILE_SIZE; // 2 * 10 = 20
+export const MIN_HEIGHT = MIN_HEIGHT_TILES * TILE_SIZE; // -2 * 10 = -20
+// Note: Steps are TILE_SIZE / 4 = 2.5. So 8 steps up/down.
 
 export type TileType = (typeof TileType)[keyof typeof TileType];
 

@@ -189,6 +189,34 @@ export function createWorldTexture(): THREE.CanvasTexture {
   }
   ctx.restore();
 
+  // 7. Water (Col 2, Bot) -> (half * 2, half)
+  ctx.save();
+  ctx.translate(half * 2, half);
+  ctx.fillStyle = '#0277bd'; // Deep Blue
+  ctx.fillRect(0, 0, half, half);
+  // Waves
+  ctx.fillStyle = '#4fc3f7';
+  for (let i = 0; i < 20; i++) {
+    const x = Math.random() * half;
+    const y = Math.random() * half;
+    ctx.fillRect(x, y, 20, 4);
+  }
+  ctx.restore();
+
+  // 8. Snow (Col 3, Bot) -> (half * 3, half)
+  ctx.save();
+  ctx.translate(half * 3, half);
+  ctx.fillStyle = '#eeeeee'; // White/Grey
+  ctx.fillRect(0, 0, half, half);
+  // Sparkles/Texture
+  ctx.fillStyle = '#ffffff';
+  for (let i = 0; i < 100; i++) {
+    const x = Math.random() * half;
+    const y = Math.random() * half;
+    ctx.fillRect(x, y, 4, 4);
+  }
+  ctx.restore();
+
   const texture = new THREE.CanvasTexture(canvas);
   texture.magFilter = THREE.NearestFilter; // Retro look
   texture.minFilter = THREE.NearestFilter;
