@@ -124,12 +124,15 @@ export class Editor {
 
     // Raycast
     const mouseVec = new THREE.Vector2(this.mouseX, this.mouseY);
-    this.raycaster.setFromCamera(mouseVec, this.renderer.getCamera());
+    this.raycaster.setFromCamera(mouseVec, this.renderer.getActiveCamera());
     const target = new THREE.Vector3();
     let hit = false;
 
     // 1. Try Terrain Mesh
-    const intersects = this.raycaster.intersectObjects(this.renderer.getTrackGroup().children, false);
+    const intersects = this.raycaster.intersectObjects(
+      this.renderer.getTrackGroup().children,
+      false,
+    );
     if (intersects.length > 0) {
       target.copy(intersects[0].point);
       hit = true;
@@ -228,13 +231,16 @@ export class Editor {
 
     // Discrete Action
     const mouseVec = new THREE.Vector2(this.mouseX, this.mouseY);
-    this.raycaster.setFromCamera(mouseVec, this.renderer.getCamera());
+    this.raycaster.setFromCamera(mouseVec, this.renderer.getActiveCamera());
 
     const target = new THREE.Vector3();
     let hit = false;
 
     // 1. Try Terrain Mesh
-    const intersects = this.raycaster.intersectObjects(this.renderer.getTrackGroup().children, false);
+    const intersects = this.raycaster.intersectObjects(
+      this.renderer.getTrackGroup().children,
+      false,
+    );
     if (intersects.length > 0) {
       target.copy(intersects[0].point);
       hit = true;

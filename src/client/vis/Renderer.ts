@@ -17,6 +17,7 @@ export class GameRenderer {
 
   private track: Track | null = null; // Stored reference for height lookup
   private editorEnabled: boolean = false;
+  private activeCamera: THREE.Camera;
 
   // ... (constructor remains mostly same, but remove single carMesh creation)
 
@@ -40,6 +41,10 @@ export class GameRenderer {
     return this.scene;
   }
 
+  public getActiveCamera(): THREE.Camera {
+    return this.activeCamera;
+  }
+
   constructor(container: HTMLElement) {
     // Basic Scene
     this.scene = new THREE.Scene();
@@ -60,6 +65,8 @@ export class GameRenderer {
     );
 
     this.perspectiveCamera = new THREE.PerspectiveCamera(100, aspect, 0.1, 1000);
+
+    this.activeCamera = this.camera;
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setSize(container.clientWidth, container.clientHeight);
@@ -612,6 +619,7 @@ export class GameRenderer {
         activeCamera = this.camera;
       }
 
+      this.activeCamera = activeCamera;
       this.renderer.render(this.scene, activeCamera);
     });
   }
