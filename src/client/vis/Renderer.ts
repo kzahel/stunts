@@ -262,58 +262,6 @@ export class GameRenderer {
       // Rot 1: [SW, SE, NE, NW] (Texture's SW is at World NW)
 
       const rotatedCorners = [...baseCorners];
-      for (let i = 0; i < orientation; i++) {
-        const last = rotatedCorners.pop()!; // NE
-        rotatedCorners.unshift(last); // NE becomes first (at NW pos)
-
-        // Wait.
-        // If NW gets NE's UV.
-        // NE is Top Right.
-        // So World Top Left shows Texture Top Right.
-        // That is a 90 deg CCW rotation of texture?
-        // Or 90 deg CW?
-        // Imagine Arrow Pointing Up (Standard).
-        // Head at Top. base at Bottom.
-        // NW=HeadL, NE=HeadR, SW=BaseL, SE=BaseR.
-        // If NW gets BaseL (SW).
-        // World NW shows BaseL.
-        // World NE shows HeadL (NW).
-        // World SE shows HeadR (NE).
-        // World SW shows BaseR (SE).
-        // So Base is now at Top. Head is at Right.
-        // Arrow points Right.
-        // That is 90 deg Closkwise.
-
-        // So:
-        // NW gets SW?
-        // My array order: [NW, SW, SE, NE].
-        // index 0 gets index 1?
-        // Let's verify shift.
-        // rotatedCorners = [SW, SE, NE, NW].
-        // 0 (World NW) gets SW.
-        // Correct.
-
-        // But my pop/unshift does:
-        // pop takes NE. unshift puts NE at 0.
-        // So 0 gets NE.
-        // This is 90 CCW.
-
-        // To get 90 CW:
-        // 0 gets SW (1).
-        // 1 gets SE (2).
-        // 2 gets NE (3).
-        // 3 gets NW (0).
-        // So shift left.
-
-        // Implementation check:
-        // rotatedCorners.shift() -> NW.
-        // push(NW).
-        // Result: [SW, SE, NE, NW].
-        // This is correct for 90 CW.
-      }
-
-      // But my loop above used pop/unshift which is shift right.
-      // So I should use shift/push.
 
       for (let i = 0; i < orientation; i++) {
         const first = rotatedCorners.shift()!;
