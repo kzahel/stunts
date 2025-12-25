@@ -99,13 +99,13 @@ export class Editor {
     let name = 'None';
     switch (this.currentTool) {
       case EditorTool.Raise:
-        name = 'RAISE (1)';
+        name = '⬆️ RAISE (1)';
         break;
       case EditorTool.Lower:
-        name = 'LOWER (2)';
+        name = '⬇️ LOWER (2)';
         break;
       case EditorTool.Flatten:
-        name = 'FLATTEN (3)';
+        name = '➖ FLATTEN (3)';
         break;
     }
     this.ui.updateEditorStatus(this.active, name);
@@ -126,9 +126,19 @@ export class Editor {
     const mouseVec = new THREE.Vector2(this.mouseX, this.mouseY);
     this.raycaster.setFromCamera(mouseVec, this.renderer.getCamera());
     const target = new THREE.Vector3();
+    let hit = false;
+
+    // 1. Try Terrain Mesh
+    const intersects = this.raycaster.intersectObjects(this.renderer.getTrackGroup().children, false);
+    if (intersects.length > 0) {
+      target.copy(intersects[0].point);
+      hit = true;
+    } else if (this.raycaster.ray.intersectPlane(this.plane, target)) {
+      hit = true;
+    }
 
     // Raycast against infinite plane for generic ground targeting
-    if (this.raycaster.ray.intersectPlane(this.plane, target)) {
+    if (hit) {
       // Snap to Tile Center
       const tx = Math.floor(target.x / TILE_SIZE);
       const ty = Math.floor(target.z / TILE_SIZE);
@@ -220,10 +230,19 @@ export class Editor {
     const mouseVec = new THREE.Vector2(this.mouseX, this.mouseY);
     this.raycaster.setFromCamera(mouseVec, this.renderer.getCamera());
 
-    // Raycast against track group for precise hit, or plane if needed?
-    // Plane is easier for generic tile selection
     const target = new THREE.Vector3();
-    if (this.raycaster.ray.intersectPlane(this.plane, target)) {
+    let hit = false;
+
+    // 1. Try Terrain Mesh
+    const intersects = this.raycaster.intersectObjects(this.renderer.getTrackGroup().children, false);
+    if (intersects.length > 0) {
+      target.copy(intersects[0].point);
+      hit = true;
+    } else if (this.raycaster.ray.intersectPlane(this.plane, target)) {
+      hit = true;
+    }
+
+    if (hit) {
       const tx = Math.floor(target.x / TILE_SIZE);
       const ty = Math.floor(target.z / TILE_SIZE);
 
