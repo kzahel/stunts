@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { drawWater } from './WaterUtils';
 
 export function createWorldTexture(): THREE.CanvasTexture {
   const width = 1024; // 4x2 Grid
@@ -190,17 +191,7 @@ export function createWorldTexture(): THREE.CanvasTexture {
   ctx.restore();
 
   // 7. Water (Col 2, Bot) -> (half * 2, half)
-  ctx.save();
-  ctx.translate(half * 2, half);
-  ctx.fillStyle = '#0277bd'; // Deep Blue
-  ctx.fillRect(0, 0, half, half);
-  // Waves
-  ctx.fillStyle = '#4fc3f7';
-  for (let i = 0; i < 20; i++) {
-    const x = Math.random() * half;
-    const y = Math.random() * half;
-    ctx.fillRect(x, y, 20, 4);
-  }
+  drawWater(ctx, half * 2, half, half, 0);
   ctx.restore();
 
   // 8. Snow (Col 3, Bot) -> (half * 3, half)

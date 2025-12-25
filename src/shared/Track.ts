@@ -205,9 +205,9 @@ export class Track {
   public placeRoad(x: number, y: number) {
     if (x < 0 || x >= TRACK_SIZE || y < 0 || y >= TRACK_SIZE) return;
 
-    // Force current to be a road if it's grass
+    // Force current to be a road (overwriting whatever was there)
     const current = this.getTile(x, y);
-    if (current && current.type === TileType.Grass) {
+    if (current) {
       this.setTile(x, y, TileType.Road, current.height, 0);
     }
 

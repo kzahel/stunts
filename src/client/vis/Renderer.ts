@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { WorldState } from '../../shared/Schema';
 import { Track, TRACK_SIZE, TileType, TILE_SIZE } from '../../shared/Track';
 import { createWorldTexture } from './TextureGenerator';
+import { drawWater } from './WaterUtils';
 
 export class GameRenderer {
   private scene: THREE.Scene;
@@ -19,6 +20,8 @@ export class GameRenderer {
   private track: Track | null = null; // Stored reference for height lookup
   private editorEnabled: boolean = false;
   private activeCamera: THREE.Camera;
+  private worldTexture: THREE.CanvasTexture | null = null;
+  private frame: number = 0;
 
   // ... (constructor remains mostly same, but remove single carMesh creation)
 
@@ -133,6 +136,7 @@ export class GameRenderer {
     // Generate Texture
     const texture = createWorldTexture();
     texture.colorSpace = THREE.SRGBColorSpace;
+    this.worldTexture = texture;
 
     const vertices: number[] = [];
     const uvs: number[] = [];
@@ -480,6 +484,21 @@ export class GameRenderer {
   }
 
   public render(state: WorldState, _alpha: number) {
+    // Animate Water
+    if (this.worldTexture && this.worldTexture.image) {
+      this.frame++;
+      // Update every 5 frames for slower animation? Or every frame.
+      // 60FPS -> frame++ every frame.
+      const ctx = this.worldTexture.image.getContext('2d');
+      if (ctx) {
+        // Water is at Col 2, Bot (Index 6 roughly if linear? No, grid)
+        // Utils uses: x, y, size
+        // TextureGenerator: half = 256. x = 512, y = 256.
+        drawWater(ctx, 512, 256, 256, this.frame);
+        this.worldTexture.needsUpdate = true;
+      }
+    }
+
     this.updateCarMeshes(state.players.length);
 
     // Update all car positions
